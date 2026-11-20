@@ -18,6 +18,28 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:36: Tray icon and app wiring
+
+#### Summary
+
+The app now runs as a working tray app:
+
+- `Program.cs`: one instance per Windows session (a named `Local\` mutex; a second launch exits quietly), then runs `TrayApplicationContext`.
+- `TrayApplicationContext.cs` creates and connects `CoreAudioDeviceService`, `VolumeToggleService` and `HotkeyManager`, and registers the hotkey from the settings (`Ctrl+Alt+V` by default). If registration fails, a balloon message says why.
+- Tray icon: the icon and tooltip show the state ("volume normal" / "volume reduced (2 devices)"). Double-click toggles. The menu has "Reduce volume"/"Restore volume" (showing the hotkey), a disabled "Settings…" (added in a later step) and "Exit".
+- Until settings are saved to disk (next step), settings are kept in memory: every active output device is selected with the default reduction (relative, 20 %). Devices connected while the app runs are added the same way.
+- On Exit, on `Application.ApplicationExit` and when Windows signs out or shuts down (`SystemEvents.SessionEnding`), a reduced volume is restored. The hotkey, tray icon and audio objects are then released, and the icon is hidden first so no ghost icon is left behind.
+- `UI\TrayIcons.cs`: the two icons, drawn at runtime.
+
+#### Reasoning
+
+- **Icons drawn with GDI+ at runtime:** a blue speaker with two sound waves (normal) and an orange speaker with a downward arrow (reduced). Drawn at the system's small-icon size, they stay sharp at any DPI scaling, and no binary `.ico` files are needed in the repository. The colour and the shape both differ, so the state is visible without relying on colour alone. The unmanaged handle from `Bitmap.GetHicon` is copied into an owned `Icon` and freed with `DestroyIcon`, so nothing leaks.
+- **Synchronization context installed up front:** the audio service raises `DevicesChanged` through the synchronization context it captures when created. WinForms only installs its context when the first control is created, so the tray context installs it explicitly before creating the audio service. Device events then always arrive on the UI thread.
+- **Session-scoped mutex:** `Local\` allows one instance per signed-in user (e.g. with fast user switching), not one per machine.
+- **Restore on session end:** the reduced volume is a temporary state. Windows remembers device volumes across sign-ins, so without this a reduced level would stick.
+
+---
+
 ### 2026-11-20 13:33: Global hotkey manager
 
 #### Summary
