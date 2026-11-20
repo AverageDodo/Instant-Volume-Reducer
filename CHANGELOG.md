@@ -18,6 +18,21 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 14:04: Select all devices, notifications off by default
+
+#### Summary
+
+- Settings dialog: a **Select all** checkbox above the device table. It ticks every device (connected or not), or unticks them all when every device is already ticked, and shows a partial tick when only some are. Devices ticked for the first time get the defaults, as with ticking a single row. The logic lives in `DeviceTableModel.GetSelectAllState` / `ToggleAll` and is unit-tested.
+- `AppSettings.ShowNotifications` now defaults to `false`. Warnings (a device that couldn't be restored, nothing to reduce, crash recovery) are still always shown.
+
+#### Reasoning
+
+- **Checkbox above the table instead of in the column header:** a DataGridView header checkbox needs custom painting and hit-testing, and isn't reachable by keyboard or screen readers. A normal three-state checkbox gets all of that for free.
+- **Click from the partial state selects all:** that's what "Select all" promises, and it matches common file-manager and mail-client behaviour. WinForms' default (`AutoCheck`) would clear the box instead, so the click is handled manually.
+- **Notifications off by default:** requested by the user. The tray icon's colour already shows the state, so a balloon on every toggle is noise for most people.
+
+---
+
 ### 2026-11-20 13:55: Publish profile, app icon and README
 
 #### Summary

@@ -32,12 +32,13 @@ On first start, every connected output device is selected with the defaults: Rel
 - **Output devices:** a table with one row per device: *Reduce* (tick to include it), *Device*, *Mode*, *Amount %* and *Status*.
   - Devices that aren't connected but have saved settings are shown in grey and keep their settings for when you plug them back in.
   - Newly connected devices are not selected automatically. Use **Refresh** to update the list.
+  - **Select all** above the table ticks every device, or unticks them all if they're all ticked already. It shows a partial tick when only some devices are selected.
 - **Defaults:** the mode and amount a device gets when you tick it for the first time.
 - **Hotkey:** click the box and press the new combination.
   - It needs at least one of Ctrl, Alt, Shift or Win. F13–F24 and media/volume keys can also be used on their own.
   - Backspace or Delete returns to the hotkey the box started with.
   - If another app already uses the combination, the dialog says so and the old hotkey stays active.
-- **Start with Windows** and **Show a notification when the volume is reduced or restored**.
+- **Start with Windows** and **Show a notification when the volume is reduced or restored** (both off by default). Warnings, such as a device that couldn't be restored, are always shown.
 
 Changes take effect when you click **OK**. Changing a device's mode or amount while the volume is reduced applies from the next reduction. Unticking a device while it's reduced restores it right away.
 

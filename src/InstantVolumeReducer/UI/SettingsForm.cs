@@ -33,6 +33,7 @@ internal sealed class SettingsForm : Form
     private HotkeyBinding? _suspendedHotkey;
     private bool _populating;
 
+    private readonly CheckBox _selectAllBox;
     private readonly DataGridView _grid;
     private readonly DataGridViewCheckBoxColumn _enabledColumn;
     private readonly DataGridViewTextBoxColumn _nameColumn;
@@ -144,6 +145,19 @@ internal sealed class SettingsForm : Form
         _grid.CellEndEdit += (_, e) => _grid.Rows[e.RowIndex].ErrorText = string.Empty;
         _grid.DataError += OnGridDataError;
 
+        // AutoCheck is off so a click from the indeterminate state selects all (see ToggleAllDevices)
+        // instead of WinForms' default of clearing the box.
+        _selectAllBox = new CheckBox
+        {
+            Text = "Select &all",
+            AutoSize = true,
+            AutoCheck = false,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(4, 0, 3, 4),
+            AccessibleName = "Select all devices",
+        };
+        _selectAllBox.Click += (_, _) => ToggleAllDevices();
+
         var refreshButton = new Button { Text = "&Refresh", AutoSize = true, Anchor = AnchorStyles.Left };
         refreshButton.Click += (_, _) => RefreshDevices();
 
@@ -159,14 +173,16 @@ internal sealed class SettingsForm : Form
 
         // A 100 % column (rather than the default auto-size one) keeps the grid inside the group and lets
         // the help text wrap instead of widening the whole layout.
-        var devicesLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        var devicesLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         devicesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        devicesLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         devicesLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         devicesLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         devicesLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        devicesLayout.Controls.Add(_grid, 0, 0);
-        devicesLayout.Controls.Add(modeHelp, 0, 1);
-        devicesLayout.Controls.Add(refreshButton, 0, 2);
+        devicesLayout.Controls.Add(_selectAllBox, 0, 0);
+        devicesLayout.Controls.Add(_grid, 0, 1);
+        devicesLayout.Controls.Add(modeHelp, 0, 2);
+        devicesLayout.Controls.Add(refreshButton, 0, 3);
 
         var devicesGroup = new GroupBox { Text = "Output devices", Dock = DockStyle.Fill, Padding = new Padding(8) };
         devicesGroup.Controls.Add(devicesLayout);
@@ -414,7 +430,27 @@ internal sealed class SettingsForm : Form
             _populating = false;
         }
 
+        UpdateSelectAllBox();
         ShowHotkeyMessage(_hotkeyBox.Hint);
+    }
+
+    private void ToggleAllDevices()
+    {
+        if (!_grid.EndEdit())
+        {
+            return; // An invalid amount is being edited; the grid shows the error.
+        }
+
+        // The rows are the source of truth (cell edits are written back to them), so rebuilding the
+        // grid from them is the simplest way to show the new ticks, modes, amounts and styles.
+        DeviceTableModel.ToggleAll(_rows, DefaultMode, DefaultAmount);
+        PopulateGrid();
+    }
+
+    private void UpdateSelectAllBox()
+    {
+        _selectAllBox.CheckState = DeviceTableModel.GetSelectAllState(_rows);
+        _selectAllBox.Enabled = _rows.Count > 0;
     }
 
     /// <summary>Keeps rows that were never configured showing the current defaults.</summary>
@@ -489,6 +525,7 @@ internal sealed class SettingsForm : Form
             }
 
             ApplyRowStyle(gridRow, row);
+            UpdateSelectAllBox();
         }
         else if (e.ColumnIndex == _modeColumn.Index && value is ReductionMode mode)
         {

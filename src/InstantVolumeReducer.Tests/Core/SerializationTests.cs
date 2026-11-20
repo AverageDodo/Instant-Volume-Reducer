@@ -44,7 +44,7 @@ public class SerializationTests
         Assert.Equal(20, settings.DefaultAmount);
         Assert.Empty(settings.Devices);
         Assert.False(settings.StartWithWindows);
-        Assert.True(settings.ShowNotifications);
+        Assert.False(settings.ShowNotifications);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class SerializationTests
             DefaultMode = ReductionMode.Absolute,
             DefaultAmount = 15,
             StartWithWindows = true,
-            ShowNotifications = false,
+            ShowNotifications = true,
             Devices =
             [
                 new DeviceReductionConfig { DeviceId = "a", LastKnownName = "Speakers", Enabled = true, Mode = ReductionMode.Absolute, Amount = 10 },

@@ -162,6 +162,48 @@ public class DeviceTableModelTests
             result.Select(c => (c.DeviceId, c.LastKnownName, c.Enabled, c.Mode, c.Amount)));
     }
 
+    [Theory]
+    [InlineData(new bool[0], CheckState.Unchecked)]
+    [InlineData(new[] { false, false }, CheckState.Unchecked)]
+    [InlineData(new[] { true, false }, CheckState.Indeterminate)]
+    [InlineData(new[] { true, true }, CheckState.Checked)]
+    public void GetSelectAllState_ReflectsTickedRows(bool[] enabled, CheckState expected)
+    {
+        var rows = enabled.Select((e, i) => NewRow(id: $"d{i}", enabled: e, hasConfig: e)).ToList();
+
+        Assert.Equal(expected, DeviceTableModel.GetSelectAllState(rows));
+    }
+
+    [Theory]
+    [InlineData(new[] { false, false }, true)]
+    [InlineData(new[] { true, false }, true)]
+    [InlineData(new[] { true, true }, false)]
+    public void ToggleAll_SelectsAllUnlessAllAreSelected(bool[] enabled, bool expectedEnabled)
+    {
+        var rows = enabled.Select((e, i) => NewRow(id: $"d{i}", enabled: e, hasConfig: e)).ToList();
+
+        var result = DeviceTableModel.ToggleAll(rows, DefaultMode, DefaultAmount);
+
+        Assert.Equal(expectedEnabled, result);
+        Assert.All(rows, r => Assert.Equal(expectedEnabled, r.Enabled));
+    }
+
+    [Fact]
+    public void ToggleAll_NewRowsGetDefaults_ConfiguredRowsKeepTheirValues()
+    {
+        var configured = NewRow(id: "a", hasConfig: true);
+        configured.Mode = ReductionMode.Absolute;
+        configured.Amount = 7;
+        var fresh = NewRow(id: "b", connected: false);
+        fresh.Mode = ReductionMode.Absolute;
+        fresh.Amount = 99;
+
+        DeviceTableModel.ToggleAll([configured, fresh], ReductionMode.Relative, 35);
+
+        Assert.Equal((true, ReductionMode.Absolute, 7), (configured.Enabled, configured.Mode, configured.Amount));
+        Assert.Equal((true, ReductionMode.Relative, 35, true), (fresh.Enabled, fresh.Mode, fresh.Amount, fresh.HasConfig));
+    }
+
     private static DeviceRow NewRow(
         string id = "dev",
         bool hasConfig = false,

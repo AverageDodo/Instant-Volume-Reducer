@@ -55,7 +55,7 @@ public sealed class SettingsStoreTests : IDisposable
             DefaultMode = ReductionMode.Absolute,
             DefaultAmount = 35,
             StartWithWindows = true,
-            ShowNotifications = false,
+            ShowNotifications = true,
             Devices =
             [
                 new DeviceReductionConfig { DeviceId = "a", LastKnownName = "Speakers", Enabled = true, Mode = ReductionMode.Absolute, Amount = 10 },
@@ -72,7 +72,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(ReductionMode.Absolute, loaded.DefaultMode);
         Assert.Equal(35, loaded.DefaultAmount);
         Assert.True(loaded.StartWithWindows);
-        Assert.False(loaded.ShowNotifications);
+        Assert.True(loaded.ShowNotifications);
         Assert.Equal(2, loaded.Devices.Count);
         Assert.Equal(("a", "Speakers", true, ReductionMode.Absolute, 10), Describe(loaded.Devices[0]));
         Assert.Equal(("b", "Headphones", false, ReductionMode.Relative, 50), Describe(loaded.Devices[1]));

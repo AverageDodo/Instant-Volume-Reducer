@@ -121,6 +121,38 @@ public static class DeviceTableModel
     }
 
     /// <summary>
+    /// The state of the "Select all" box: checked when every row is ticked, unchecked when none is (or
+    /// there are no rows), and indeterminate when only some are.
+    /// </summary>
+    public static CheckState GetSelectAllState(IReadOnlyCollection<DeviceRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var enabled = rows.Count(r => r.Enabled);
+        return enabled == 0 ? CheckState.Unchecked
+            : enabled == rows.Count ? CheckState.Checked
+            : CheckState.Indeterminate;
+    }
+
+    /// <summary>
+    /// What clicking "Select all" does: ticks every row, unless every row is already ticked, in which
+    /// case it unticks them all. Rows ticked for the first time get the defaults (see <see cref="SetEnabled"/>).
+    /// </summary>
+    /// <returns><c>true</c> if the rows were ticked, <c>false</c> if they were unticked.</returns>
+    public static bool ToggleAll(IReadOnlyCollection<DeviceRow> rows, ReductionMode defaultMode, int defaultAmount)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var enable = GetSelectAllState(rows) != CheckState.Checked;
+        foreach (var row in rows)
+        {
+            SetEnabled(row, enable, defaultMode, defaultAmount);
+        }
+
+        return enable;
+    }
+
+    /// <summary>
     /// Turns the rows into per-device settings. Rows that were never configured (unticked, no saved
     /// entry) are left out; everything else is kept, including disconnected devices.
     /// </summary>

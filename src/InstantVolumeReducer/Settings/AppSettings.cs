@@ -61,5 +61,9 @@ public sealed class AppSettings
 
     public bool StartWithWindows { get; set; }
 
-    public bool ShowNotifications { get; set; } = true;
+    /// <summary>
+    /// Whether every toggle shows a notification. Off by default. Warnings (e.g. a device that couldn't
+    /// be restored, nothing to reduce, crash recovery) are shown regardless.
+    /// </summary>
+    public bool ShowNotifications { get; set; }
 }
