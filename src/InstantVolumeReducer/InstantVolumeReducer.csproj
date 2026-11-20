@@ -6,6 +6,14 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Instant Volume Reducer</Product>
+    <AssemblyTitle>Instant Volume Reducer</AssemblyTitle>
+    <Description>Reduces the volume of selected audio output devices with a global hotkey and restores it on the next press.</Description>
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
