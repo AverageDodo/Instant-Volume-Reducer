@@ -10,31 +10,71 @@ public sealed class CoreAudioDeviceService : IAudioDeviceService, IDisposable
 {
     private const DeviceState ListedStates = DeviceState.Active | DeviceState.Unplugged;
 
+    /// <summary>
+    /// The role whose default is followed. Windows' Sound settings and taskbar volume menu set the Console
+    /// and Multimedia defaults together; Communications (the default for calls) is a separate choice.
+    /// </summary>
+    private const Role FollowedRole = Role.Console;
+
     private readonly MMDeviceEnumerator _enumerator;
     private readonly MMDeviceNotificationClient _notificationClient;
     private readonly SynchronizationContext? _synchronizationContext;
+    private string? _lastDefaultDeviceId;
     private bool _disposed;
 
     /// <summary>
-    /// Creates the service. Create it on the UI thread so <see cref="DevicesChanged"/> is raised there;
-    /// without a synchronization context it is raised on a thread-pool thread.
+    /// Creates the service. Create it on the UI thread so <see cref="DevicesChanged"/> and
+    /// <see cref="DefaultDeviceChanged"/> are raised there; without a synchronization context they are
+    /// raised on a thread-pool thread.
     /// </summary>
     public CoreAudioDeviceService()
     {
         _synchronizationContext = SynchronizationContext.Current;
         _enumerator = new MMDeviceEnumerator();
+        _lastDefaultDeviceId = GetDefaultOutputDeviceId();
 
         // Raise NAudio's events synchronously on the audio worker thread and re-dispatch them ourselves,
         // so handlers never run on that thread (it holds an internal lock and must not call back into
         // the audio stack) regardless of whether a synchronization context exists.
         _notificationClient = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
-        _notificationClient.DeviceAdded += (_, _) => OnDevicesChanged();
-        _notificationClient.DeviceRemoved += (_, _) => OnDevicesChanged();
-        _notificationClient.DeviceStateChanged += (_, _) => OnDevicesChanged();
+        _notificationClient.DeviceAdded += (_, _) => Dispatch(RaiseDevicesChanged);
+        _notificationClient.DeviceRemoved += (_, _) => Dispatch(RaiseDevicesChanged);
+        _notificationClient.DeviceStateChanged += (_, _) => Dispatch(RaiseDevicesChanged);
+        _notificationClient.DefaultDeviceChanged += (_, e) =>
+        {
+            if (e.Flow == DataFlow.Render && e.Role == FollowedRole)
+            {
+                var deviceId = e.DeviceId;
+                Dispatch(() => RaiseDefaultDeviceChanged(deviceId));
+            }
+        };
     }
 
     /// <inheritdoc />
     public event EventHandler? DevicesChanged;
+
+    /// <inheritdoc />
+    public event EventHandler? DefaultDeviceChanged;
+
+    /// <inheritdoc />
+    public string? GetDefaultOutputDeviceId()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        MMDevice? device = null;
+        try
+        {
+            return _enumerator.TryGetDefaultAudioEndpoint(DataFlow.Render, FollowedRole, out device) ? device!.ID : null;
+        }
+        catch (Exception ex) when (IsDeviceError(ex))
+        {
+            return null;
+        }
+        finally
+        {
+            device?.Dispose();
+        }
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<AudioDeviceInfo> GetOutputDevices()
@@ -125,6 +165,7 @@ public sealed class CoreAudioDeviceService : IAudioDeviceService, IDisposable
 
         _disposed = true;
         DevicesChanged = null;
+        DefaultDeviceChanged = null;
         _notificationClient.Dispose();
         _enumerator.Dispose();
     }
@@ -177,7 +218,8 @@ public sealed class CoreAudioDeviceService : IAudioDeviceService, IDisposable
     private static bool IsDeviceError(Exception ex) =>
         ex is COMException or InvalidOperationException or ArgumentException or UnauthorizedAccessException;
 
-    private void OnDevicesChanged()
+    /// <summary>Runs <paramref name="action"/> on the captured synchronization context, or the thread pool.</summary>
+    private void Dispatch(Action action)
     {
         if (_disposed)
         {
@@ -186,11 +228,11 @@ public sealed class CoreAudioDeviceService : IAudioDeviceService, IDisposable
 
         if (_synchronizationContext is not null)
         {
-            _synchronizationContext.Post(_ => RaiseDevicesChanged(), null);
+            _synchronizationContext.Post(_ => action(), null);
         }
         else
         {
-            ThreadPool.QueueUserWorkItem(_ => RaiseDevicesChanged());
+            ThreadPool.QueueUserWorkItem(_ => action());
         }
     }
 
@@ -200,5 +242,20 @@ public sealed class CoreAudioDeviceService : IAudioDeviceService, IDisposable
         {
             DevicesChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Windows can report the same default more than once (e.g. when an app re-applies it), so only a
+    /// different device raises the event.
+    /// </summary>
+    private void RaiseDefaultDeviceChanged(string? deviceId)
+    {
+        if (_disposed || string.Equals(deviceId, _lastDefaultDeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastDefaultDeviceId = deviceId;
+        DefaultDeviceChanged?.Invoke(this, EventArgs.Empty);
     }
 }

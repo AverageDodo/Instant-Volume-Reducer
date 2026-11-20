@@ -57,7 +57,13 @@ internal sealed class SettingsForm : Form
         _original = settings;
         _audio = audio ?? throw new ArgumentNullException(nameof(audio));
         _hotkeys = hotkeys ?? throw new ArgumentNullException(nameof(hotkeys));
-        _rows = DeviceTableModel.BuildRows(_audio.GetOutputDevices(), settings.Devices, settings.DefaultMode, settings.DefaultAmount);
+        _rows = DeviceTableModel.BuildRows(
+            _audio.GetOutputDevices(),
+            settings.Devices,
+            settings.DefaultMode,
+            settings.DefaultAmount,
+            settings.WindowsDefaultDevice ?? new WindowsDefaultDeviceConfig(),
+            _audio.GetDefaultOutputDeviceId());
 
         SuspendLayout();
 
@@ -166,7 +172,9 @@ internal sealed class SettingsForm : Form
             AutoSize = true,
             Dock = DockStyle.Fill,
             ForeColor = SystemColors.GrayText,
-            Text = "Relative: reduce to Amount % of the current volume. Absolute: set the volume to Amount % " +
+            Text = "Windows default device: whichever device is the default when you press the hotkey. If the " +
+                   "default changes while the volume is reduced, the reduction moves to the new device. " +
+                   "Relative: reduce to Amount % of the current volume. Absolute: set the volume to Amount % " +
                    "(a quieter device is left as it is). Devices that aren't connected are shown in grey.",
             Margin = new Padding(3, 6, 3, 3),
         };
@@ -303,6 +311,8 @@ internal sealed class SettingsForm : Form
         _showNotificationsBox.Checked = settings.ShowNotifications;
 
         PopulateGrid();
+
+        _audio.DefaultDeviceChanged += OnDefaultDeviceChanged;
     }
 
     /// <summary>The edited settings after OK; <c>null</c> if the dialog was cancelled.</summary>
@@ -323,6 +333,7 @@ internal sealed class SettingsForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        _audio.DefaultDeviceChanged -= OnDefaultDeviceChanged;
         ResumeHotkey();
         base.OnFormClosed(e);
     }
@@ -355,6 +366,7 @@ internal sealed class SettingsForm : Form
         {
             Hotkey = binding.ToString(),
             Devices = DeviceTableModel.ToConfigs(_rows),
+            WindowsDefaultDevice = DeviceTableModel.ToWindowsDefaultConfig(_rows) ?? new WindowsDefaultDeviceConfig(),
             DefaultMode = DefaultMode,
             DefaultAmount = DefaultAmount,
             StartWithWindows = _startWithWindowsBox.Checked,
@@ -407,8 +419,36 @@ internal sealed class SettingsForm : Form
             return;
         }
 
-        _rows = DeviceTableModel.BuildRows(_audio.GetOutputDevices(), DeviceTableModel.ToConfigs(_rows), DefaultMode, DefaultAmount);
+        _rows = DeviceTableModel.BuildRows(
+            _audio.GetOutputDevices(),
+            DeviceTableModel.ToConfigs(_rows),
+            DefaultMode,
+            DefaultAmount,
+            DeviceTableModel.ToWindowsDefaultConfig(_rows),
+            _audio.GetDefaultOutputDeviceId());
         PopulateGrid();
+    }
+
+    /// <summary>
+    /// Keeps the Windows default device row's status current without rebuilding the table, so edits in
+    /// progress aren't disturbed.
+    /// </summary>
+    private void OnDefaultDeviceChanged(object? sender, EventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        foreach (DataGridViewRow gridRow in _grid.Rows)
+        {
+            if (gridRow.Tag is DeviceRow { IsWindowsDefault: true } row)
+            {
+                DeviceTableModel.SetCurrentDefault(row, _audio.GetDefaultOutputDeviceId(), _audio.GetOutputDevices());
+                gridRow.Cells[_statusColumn.Index].Value = DeviceTableModel.StatusText(row);
+                ApplyRowStyle(gridRow, row);
+            }
+        }
     }
 
     private void PopulateGrid()
@@ -419,9 +459,16 @@ internal sealed class SettingsForm : Form
             _grid.Rows.Clear();
             foreach (var row in _rows)
             {
-                var index = _grid.Rows.Add(row.Enabled, row.Name, row.Mode, row.Amount, row.IsConnected ? "Connected" : "Not connected");
+                var index = _grid.Rows.Add(row.Enabled, row.Name, row.Mode, row.Amount, DeviceTableModel.StatusText(row));
                 var gridRow = _grid.Rows[index];
                 gridRow.Tag = row;
+                if (row.IsWindowsDefault)
+                {
+                    gridRow.Cells[_nameColumn.Index].ToolTipText =
+                        "Whichever device is the Windows default output device when you press the hotkey. " +
+                        "A device that's also ticked below uses its own settings.";
+                }
+
                 ApplyRowStyle(gridRow, row);
             }
         }

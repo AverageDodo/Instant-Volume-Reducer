@@ -204,6 +204,76 @@ public class DeviceTableModelTests
         Assert.Equal((true, ReductionMode.Relative, 35, true), (fresh.Enabled, fresh.Mode, fresh.Amount, fresh.HasConfig));
     }
 
+    [Fact]
+    public void BuildRows_WithWindowsDefault_PinsDefaultRowFirst()
+    {
+        AudioDeviceInfo[] devices = [new("spk", "Speakers", true), new("hp", "Headphones", true)];
+        var windowsDefault = new WindowsDefaultDeviceConfig { Enabled = true, Mode = ReductionMode.Absolute, Amount = 5 };
+
+        var rows = DeviceTableModel.BuildRows(devices, [], DefaultMode, DefaultAmount, windowsDefault, "SPK");
+
+        Assert.Equal([DeviceTableModel.WindowsDefaultRowName, "Headphones", "Speakers"], rows.Select(r => r.Name));
+        var row = rows[0];
+        Assert.True(row.IsWindowsDefault);
+        Assert.True(row.IsConnected);
+        Assert.Equal((true, ReductionMode.Absolute, 5), (row.Enabled, row.Mode, row.Amount));
+        Assert.Equal("Currently: Speakers", DeviceTableModel.StatusText(row));
+    }
+
+    [Fact]
+    public void BuildRows_WithoutWindowsDefaultConfig_HasNoDefaultRow()
+    {
+        var rows = DeviceTableModel.BuildRows([new AudioDeviceInfo("spk", "Speakers", true)], [], DefaultMode, DefaultAmount);
+
+        Assert.DoesNotContain(rows, r => r.IsWindowsDefault);
+    }
+
+    [Fact]
+    public void DefaultRow_NoDefaultDevice_IsGreyedWithStatus()
+    {
+        var rows = DeviceTableModel.BuildRows([], [], DefaultMode, DefaultAmount, new WindowsDefaultDeviceConfig(), currentDefaultId: null);
+
+        var row = Assert.Single(rows);
+        Assert.False(row.IsConnected);
+        Assert.Equal("No default device", DeviceTableModel.StatusText(row));
+    }
+
+    [Fact]
+    public void SetCurrentDefault_UpdatesNameAndStatus()
+    {
+        AudioDeviceInfo[] devices = [new("spk", "Speakers", true), new("hp", "Headphones", true)];
+        var row = DeviceTableModel.BuildRows(devices, [], DefaultMode, DefaultAmount, new WindowsDefaultDeviceConfig(), "spk")[0];
+
+        DeviceTableModel.SetCurrentDefault(row, "hp", devices);
+        Assert.Equal("Currently: Headphones", DeviceTableModel.StatusText(row));
+
+        DeviceTableModel.SetCurrentDefault(row, "unknown-id", devices);
+        Assert.Equal($"Currently: {DeviceTableModel.UnknownDeviceName}", DeviceTableModel.StatusText(row));
+    }
+
+    [Fact]
+    public void ToConfigs_LeavesOutDefaultRow_ToWindowsDefaultConfigReadsIt()
+    {
+        var windowsDefault = new WindowsDefaultDeviceConfig { Enabled = false, Mode = ReductionMode.Relative, Amount = 30 };
+        var rows = DeviceTableModel.BuildRows([new AudioDeviceInfo("spk", "Speakers", true)], [], DefaultMode, DefaultAmount, windowsDefault, "spk");
+
+        DeviceTableModel.ToggleAll(rows, ReductionMode.Absolute, 15);
+
+        var configs = DeviceTableModel.ToConfigs(rows);
+        Assert.Equal("spk", Assert.Single(configs).DeviceId);
+
+        // Select all ticks the default row too, but it keeps its own mode and amount.
+        var config = DeviceTableModel.ToWindowsDefaultConfig(rows);
+        Assert.NotNull(config);
+        Assert.Equal((true, ReductionMode.Relative, 30), (config.Enabled, config.Mode, config.Amount));
+    }
+
+    [Fact]
+    public void ToWindowsDefaultConfig_WithoutDefaultRow_IsNull()
+    {
+        Assert.Null(DeviceTableModel.ToWindowsDefaultConfig([NewRow()]));
+    }
+
     private static DeviceRow NewRow(
         string id = "dev",
         bool hasConfig = false,

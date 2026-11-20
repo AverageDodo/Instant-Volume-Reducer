@@ -18,6 +18,28 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 14:12: Follow the Windows default output device
+
+#### Summary
+
+- New optional **Windows default device** row, pinned at the top of the settings dialog's device table, with its own tick, mode and amount (`AppSettings.WindowsDefaultDevice`; missing in older settings files, which means off).
+- When ticked, the hotkey also reduces whichever device is the Windows default output device at that moment.
+- If the default changes while the volume is reduced, `VolumeToggleService.HandleDefaultDeviceChanged` moves the reduction: devices reduced only because they were the default are restored, and the new default is reduced. The tray tooltip updates, and a notification names the new device if notifications are on.
+- `IAudioDeviceService` gained `GetDefaultOutputDeviceId()` and a `DefaultDeviceChanged` event. `CoreAudioDeviceService` listens to NAudio's `DefaultDeviceChanged` for render devices, Console role, raises it on the UI thread and only when the device actually differs.
+- `ReducedDevice` gained `ViaWindowsDefault` (defaults to `false`, so older state files still load). Crash recovery is unchanged because the state always lists concrete devices.
+- The settings dialog keeps the default row's "Currently: …" status live while it's open; Refresh updates it too.
+
+#### Reasoning
+
+- **A separate setting, not a magic device ID in `Devices`:** keeps the per-device list purely about real endpoints and makes the JSON self-explanatory.
+- **A device selected by name wins over the default row:** naming a device is the more specific choice, so it uses its own settings, is reduced once, and stays reduced when the default moves away. If it's the new default but wasn't reduced yet (e.g. it was unplugged at the time), it's reduced with its own settings.
+- **Console role only:** Windows' Sound settings and the taskbar volume menu set the Console and Multimedia defaults together. The Communications default (for calls) is a separate choice, so it's left out for now.
+- **Previous default that can't be restored stays in the state:** unplugging the default device is the most common reason the default changes, and at that moment its volume can't be set. Keeping it means it's restored on the final restore, provided it's connected again by then, instead of losing its original volume.
+- **The default row being newly ticked while reduced takes effect on the next reduction:** the same rule as newly ticked named devices.
+- **Dedupe in the audio service:** Windows can report the same default more than once, which would otherwise trigger needless state writes.
+
+---
+
 ### 2026-11-20 14:04: Select all devices, notifications off by default
 
 #### Summary

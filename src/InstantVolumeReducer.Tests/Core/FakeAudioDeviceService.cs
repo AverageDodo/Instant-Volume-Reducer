@@ -8,8 +8,21 @@ namespace InstantVolumeReducer.Tests.Core;
 internal sealed class FakeAudioDeviceService : IAudioDeviceService
 {
     private readonly Dictionary<string, FakeDevice> _devices = new(StringComparer.OrdinalIgnoreCase);
+    private string? _defaultId;
 
     public event EventHandler? DevicesChanged;
+
+    public event EventHandler? DefaultDeviceChanged;
+
+    /// <summary>Simulates the user picking another default output device (or none) in Windows.</summary>
+    public FakeAudioDeviceService SetDefault(string? id)
+    {
+        _defaultId = id;
+        DefaultDeviceChanged?.Invoke(this, EventArgs.Empty);
+        return this;
+    }
+
+    public string? GetDefaultOutputDeviceId() => _defaultId;
 
     /// <summary>Number of successful <see cref="TrySetVolume"/> calls.</summary>
     public int SetCalls { get; private set; }

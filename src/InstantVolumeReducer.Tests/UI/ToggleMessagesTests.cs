@@ -83,6 +83,30 @@ public class ToggleMessagesTests
         Assert.EndsWith("The file was kept as state.json.bak.", text);
     }
 
+    [Fact]
+    public void DefaultDeviceMoved_NamesTheNewDevice()
+    {
+        var change = new DefaultDeviceChange(["spk"], "hp");
+
+        Assert.Equal(
+            "The default output device changed, so the volume reduction moved to Headphones.",
+            ToggleMessages.DefaultDeviceMoved(change, id => id == "hp" ? "Headphones" : null));
+        Assert.Equal(
+            "The default output device changed, so the volume reduction moved to the new device.",
+            ToggleMessages.DefaultDeviceMoved(change, _ => null));
+    }
+
+    [Fact]
+    public void DefaultDeviceMoved_OnlyRestored_SaysWhatWasRestored()
+    {
+        Assert.Equal(
+            "The default output device changed, so the volume of Speakers was restored.",
+            ToggleMessages.DefaultDeviceMoved(new DefaultDeviceChange(["spk"], null), _ => "Speakers"));
+        Assert.Equal(
+            "The default output device changed, so the volume of 2 devices was restored.",
+            ToggleMessages.DefaultDeviceMoved(new DefaultDeviceChange(["a", "b"], null), _ => "x"));
+    }
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(10, 10)]

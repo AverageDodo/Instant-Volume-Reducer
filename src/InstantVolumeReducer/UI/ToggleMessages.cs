@@ -41,6 +41,33 @@ public static class ToggleMessages
     }
 
     /// <summary>
+    /// After the Windows default output device changed while the volume was reduced.
+    /// </summary>
+    /// <param name="change">What moved.</param>
+    /// <param name="nameOf">Looks up a device's name by ID; <c>null</c> if unknown.</param>
+    public static string DefaultDeviceMoved(DefaultDeviceChange change, Func<string, string?> nameOf)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        ArgumentNullException.ThrowIfNull(nameOf);
+
+        if (change.ReducedDeviceId is { } reducedId)
+        {
+            return nameOf(reducedId) is { } name
+                ? $"The default output device changed, so the volume reduction moved to {name}."
+                : "The default output device changed, so the volume reduction moved to the new device.";
+        }
+
+        if (change.RestoredDeviceIds.Count == 1)
+        {
+            return nameOf(change.RestoredDeviceIds[0]) is { } name
+                ? $"The default output device changed, so the volume of {name} was restored."
+                : "The default output device changed, so the previous device's volume was restored.";
+        }
+
+        return $"The default output device changed, so the volume of {Devices(change.RestoredDeviceIds.Count)} was restored.";
+    }
+
+    /// <summary>
     /// The notification after startup crash recovery, or <c>null</c> if there is nothing to tell the user.
     /// </summary>
     public static string? Recovery(RecoveryResult result)

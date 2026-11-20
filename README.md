@@ -6,6 +6,7 @@ A small Windows tray app that turns down selected audio output devices when you 
 
 - **Toggle with one hotkey:** the first press reduces, the second restores the exact previous levels. The default hotkey is `Ctrl+Alt+V`, and you can change it.
 - **You choose the devices:** for example, reduce the speakers but leave the headset alone.
+- **Follow the Windows default device (optional):** reduce whichever device is the default output, and move the reduction along when you switch the default while the volume is reduced.
 - **Per-device reduction:** each device has its own mode and amount.
   - *Relative:* reduce to *Amount %* of the current volume (e.g. 20 % of 50 % = 10 %).
   - *Absolute:* set the volume to *Amount %*. If the device is already quieter than that, it's left as it is, because the hotkey never makes anything louder.
@@ -33,6 +34,11 @@ On first start, every connected output device is selected with the defaults: Rel
   - Devices that aren't connected but have saved settings are shown in grey and keep their settings for when you plug them back in.
   - Newly connected devices are not selected automatically. Use **Refresh** to update the list.
   - **Select all** above the table ticks every device, or unticks them all if they're all ticked already. It shows a partial tick when only some devices are selected.
+  - **Windows default device**, the pinned first row, stands for whichever device is the default output when you press the hotkey (the one picked in Sound settings or the taskbar volume menu). Its Status column shows the current one.
+    - If the default changes while the volume is reduced (also when Windows switches on its own, e.g. after you plug in headphones), the old default goes back to its original volume and the new one is reduced.
+    - A device that's also ticked by name uses its own row's settings, is reduced only once, and stays reduced when the default moves away from it.
+    - If the old default can't be restored because it was unplugged, it's restored when you restore the volume, provided it's connected again by then.
+    - Only the normal default is followed, not the separate default for calls ("communications device").
 - **Defaults:** the mode and amount a device gets when you tick it for the first time.
 - **Hotkey:** click the box and press the new combination.
   - It needs at least one of Ctrl, Alt, Shift or Win. F13–F24 and media/volume keys can also be used on their own.

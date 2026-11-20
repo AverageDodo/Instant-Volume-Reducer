@@ -21,6 +21,18 @@ public interface IAudioDeviceService
     event EventHandler? DevicesChanged;
 
     /// <summary>
+    /// Raised when the Windows default output device changes (the one chosen in Sound settings or the
+    /// taskbar volume menu). Raised once per actual change, on the same thread as <see cref="DevicesChanged"/>.
+    /// </summary>
+    event EventHandler? DefaultDeviceChanged;
+
+    /// <summary>
+    /// The ID of the current Windows default output device, or <c>null</c> if there is none (e.g. no
+    /// output device is connected).
+    /// </summary>
+    string? GetDefaultOutputDeviceId();
+
+    /// <summary>
     /// Lists output devices that are either active or unplugged (known but not currently connected).
     /// Disabled and removed devices are not listed.
     /// </summary>

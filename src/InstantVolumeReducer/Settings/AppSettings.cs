@@ -39,6 +39,22 @@ public sealed class DeviceReductionConfig
 }
 
 /// <summary>
+/// Reduction settings for "whichever device is the Windows default output device right now". When enabled,
+/// the hotkey also reduces the current default device, and the reduction moves along when the default
+/// changes while the volume is reduced.
+/// </summary>
+public sealed class WindowsDefaultDeviceConfig
+{
+    /// <summary>Whether the hotkey reduces the current Windows default output device.</summary>
+    public bool Enabled { get; set; }
+
+    public ReductionMode Mode { get; set; } = AppSettings.DefaultReductionMode;
+
+    /// <summary>The reduction amount in percent (0–100); its meaning depends on <see cref="Mode"/>.</summary>
+    public int Amount { get; set; } = AppSettings.DefaultReductionAmount;
+}
+
+/// <summary>
 /// All user settings. Serialized as JSON to <c>%APPDATA%\InstantVolumeReducer\settings.json</c>.
 /// </summary>
 public sealed class AppSettings
@@ -52,6 +68,12 @@ public sealed class AppSettings
 
     /// <summary>Per-device settings, including devices that are currently disconnected.</summary>
     public List<DeviceReductionConfig> Devices { get; set; } = [];
+
+    /// <summary>
+    /// The "Windows default device" row. A device that is also in <see cref="Devices"/> (enabled) uses its
+    /// own settings there instead. Missing in settings files from before this option, which means off.
+    /// </summary>
+    public WindowsDefaultDeviceConfig WindowsDefaultDevice { get; set; } = new();
 
     /// <summary>The mode a device gets when it is selected for the first time.</summary>
     public ReductionMode DefaultMode { get; set; } = DefaultReductionMode;

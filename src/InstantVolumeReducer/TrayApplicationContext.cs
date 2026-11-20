@@ -65,9 +65,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             saveSettings = loaded.Status == SettingsLoadStatus.Missing || loaded.BackupPath is not null;
         }
 
-        _toggle = new VolumeToggleService(_audio, _settings.Devices);
+        _toggle = new VolumeToggleService(_audio, _settings.Devices, defaultDeviceConfig: _settings.WindowsDefaultDevice);
         _toggle.StateChanged += OnToggleStateChanged;
         _audio.DevicesChanged += OnDevicesChanged;
+        _audio.DefaultDeviceChanged += OnDefaultDeviceChanged;
 
         _icons = new TrayIcons();
 
@@ -253,6 +254,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// The user (or Windows, e.g. when headphones are plugged in) switched the default output device. While
+    /// the volume is reduced, the reduction moves to the new device; the tray updates through StateChanged.
+    /// </summary>
+    private void OnDefaultDeviceChanged(object? sender, EventArgs e)
+    {
+        if (_shutDown)
+        {
+            return;
+        }
+
+        var change = _toggle.HandleDefaultDeviceChanged();
+        if (change.HasChanges && _settings.ShowNotifications)
+        {
+            var names = _audio.GetOutputDevices()
+                .GroupBy(d => d.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+            ShowBalloon(ToggleMessages.DefaultDeviceMoved(change, id => names.GetValueOrDefault(id)), ToolTipIcon.Info);
+        }
+    }
+
     /// <summary>Opens the settings dialog, or brings it to the front if it's already open.</summary>
     private void OpenSettings()
     {
@@ -310,7 +332,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices());
         SaveSettings();
         ApplyAutostart();
-        _toggle.UpdateDeviceConfigs(_settings.Devices);
+        _toggle.UpdateDeviceConfigs(_settings.Devices, _settings.WindowsDefaultDevice);
         UpdateTrayState();
     }
 
@@ -377,6 +399,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Application.ApplicationExit -= OnApplicationExit;
         SystemEvents.SessionEnding -= OnSessionEnding;
         _audio.DevicesChanged -= OnDevicesChanged;
+        _audio.DefaultDeviceChanged -= OnDefaultDeviceChanged;
         _toggle.StateChanged -= OnToggleStateChanged;
 
         // Close the dialog first: closing it re-registers a hotkey it suspended, which needs the manager.

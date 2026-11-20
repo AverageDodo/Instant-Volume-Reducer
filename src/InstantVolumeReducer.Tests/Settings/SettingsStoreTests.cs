@@ -232,6 +232,41 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Empty(_store.Load().Settings.Devices);
     }
 
+    [Fact]
+    public void Load_FileWithoutWindowsDefaultDevice_HasItOff()
+    {
+        WriteRaw("""{ "Hotkey": "Ctrl+Alt+V", "Devices": [] }""");
+
+        var config = _store.Load().Settings.WindowsDefaultDevice;
+
+        Assert.False(config.Enabled);
+        Assert.Equal((AppSettings.DefaultReductionMode, AppSettings.DefaultReductionAmount), (config.Mode, config.Amount));
+    }
+
+    [Fact]
+    public void Load_WindowsDefaultDevice_NullOrBadValues_AreFixed()
+    {
+        WriteRaw("""{ "WindowsDefaultDevice": null }""");
+        Assert.NotNull(_store.Load().Settings.WindowsDefaultDevice);
+
+        WriteRaw("""{ "WindowsDefaultDevice": { "Enabled": true, "Mode": 7, "Amount": 250 } }""");
+        var config = _store.Load().Settings.WindowsDefaultDevice;
+        Assert.True(config.Enabled);
+        Assert.Equal((AppSettings.DefaultReductionMode, 100), (config.Mode, config.Amount));
+    }
+
+    [Fact]
+    public void Save_ThenLoad_RoundTripsWindowsDefaultDevice()
+    {
+        _store.Save(new AppSettings
+        {
+            WindowsDefaultDevice = new WindowsDefaultDeviceConfig { Enabled = true, Mode = ReductionMode.Absolute, Amount = 5 },
+        });
+
+        var config = _store.Load().Settings.WindowsDefaultDevice;
+        Assert.Equal((true, ReductionMode.Absolute, 5), (config.Enabled, config.Mode, config.Amount));
+    }
+
     private void WriteRaw(string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_store.FilePath)!);

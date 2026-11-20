@@ -127,6 +127,10 @@ public sealed class SettingsStore
         }
 
         settings.Devices = devices;
+
+        settings.WindowsDefaultDevice ??= new WindowsDefaultDeviceConfig();
+        settings.WindowsDefaultDevice.Mode = NormalizeMode(settings.WindowsDefaultDevice.Mode);
+        settings.WindowsDefaultDevice.Amount = ClampAmount(settings.WindowsDefaultDevice.Amount);
         return settings;
     }
 
