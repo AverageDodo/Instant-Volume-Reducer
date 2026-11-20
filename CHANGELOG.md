@@ -18,6 +18,30 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:33: Global hotkey manager
+
+#### Summary
+
+Added the hotkey layer in `src\InstantVolumeReducer\Hotkeys\`:
+
+- `HotkeyBinding`: an immutable value of `HotkeyModifiers` (Ctrl, Alt, Shift, Win) plus a WinForms `Keys` key. `TryParse` and `ToString` round-trip the settings text (`Ctrl+Alt+V`, `Ctrl+Shift+F12`, `F13`). It also has `IsValid`, `NativeModifiers`/`VirtualKey` for `RegisterHotKey`, `Default` (`Ctrl+Alt+V`) and `FromKeyData`/`FromKeyEventArgs` for the hotkey capture box.
+- `HotkeyManager`: registers one global hotkey through `RegisterHotKey` on a hidden message-only window and raises `Pressed` on `WM_HOTKEY`. `Register(binding)` returns a `HotkeyRegistrationResult` (`Registered`, `InvalidBinding`, `AlreadyInUse`, `Failed`, plus a message for the user). `Unregister()` and `Dispose()` release the hotkey.
+- 254 new tests (310 in total): parsing, formatting, a round-trip over every usable key, the validity rule, `MOD_*` mapping, building from key events, and real registration with unused combinations (Ctrl+Alt+Shift+F23/F24).
+- The test project now sets `UseWindowsForms` so tests can use `Keys` and `KeyEventArgs`.
+
+#### Reasoning
+
+- **`RegisterHotKey` instead of a low-level keyboard hook:** this is the documented way to get a system-wide hotkey, it costs nothing between presses, and antivirus tools don't treat it as a keylogger. Its limitation, that a combination another app already registered can't be used, is reported to the user as `AlreadyInUse`.
+- **`MOD_NOREPEAT` is always set,** so holding the keys down toggles only once.
+- **Message-only window (`HWND_MESSAGE`):** it receives `WM_HOTKEY` without any visible or enumerable window, and doesn't need the tray icon to exist.
+- **Re-registering keeps the old hotkey on failure:** if the new combination can't be registered, the previous one is registered again. A failed change in the settings dialog then never leaves the app without a working hotkey.
+- **Validity rule:** at least one modifier is required, so a normal key like `V` can't be taken away from every app by accident. F13–F24 and media/volume keys may be used alone because nobody types them by accident. Modifier keys alone and mouse buttons are never valid. `TryParse` only accepts valid bindings, so a hand-edited settings file can't register something unusable.
+- **Text format:** modifiers are always written in the order Ctrl, Alt, Shift, Win, and the key last. A few keys get friendlier names (`1` instead of `D1`, `Enter`, `PageUp`/`PageDown`, `Backspace`, `CapsLock`, `ScrollLock`, `PrintScreen`). Parsing is case-insensitive, ignores spaces and also accepts `Control`, `Windows` and every `Keys` enum name.
+- **Win key in the capture box:** WinForms doesn't report the Windows key as a modifier in `KeyEventArgs`, so `FromKeyData` takes it as a separate flag that the capture box (step 6) sets from the keyboard state.
+- **`DllImport` instead of `LibraryImport`:** `LibraryImport` would require enabling unsafe code in the project for two simple calls.
+
+---
+
 ### 2026-11-20 13:29: Volume toggle service with per-device reduction
 
 #### Summary
