@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="InstantVolumeReducer.Tests/InstantVolumeReducer.Tests.csproj" />
+  <Project Path="InstantVolumeReducer/InstantVolumeReducer.csproj" />
+</Solution>
