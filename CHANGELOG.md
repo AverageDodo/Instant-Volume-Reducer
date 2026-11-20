@@ -18,6 +18,33 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:45: Settings persistence and settings dialog
+
+#### Summary
+
+Settings are now saved to disk and can be changed in a settings dialog:
+
+- `Settings\SettingsStore.cs` loads and saves `AppSettings` as indented JSON at `%APPDATA%\InstantVolumeReducer\settings.json` (the path can be injected for tests). A missing file gives defaults. A corrupt or unreadable file also gives defaults: a copy is kept as `settings.json.bak` and the tray shows a warning. Saving writes a temp file and then replaces the settings file. Loaded values are normalized: amounts clamped to 0–100, unknown modes set to the default, an invalid hotkey replaced by `Ctrl+Alt+V` (a valid one is written in its standard form), and device entries without an ID or with a repeated ID dropped.
+- First run (no settings file): every active output device is selected with the defaults and the file is saved, the same behaviour step 5 had in memory. Devices connected later are **no longer selected automatically**. They appear in the dialog; only the saved names of known devices are kept up to date (`Settings\DeviceConfigUpdater.cs`).
+- `UI\SettingsForm.cs`: a device table (Reduce · Device · Mode · Amount % · Status) listing connected devices plus saved devices that aren't connected (in grey), with a Refresh button. It also has defaults for newly selected devices, the hotkey box, "Start with Windows" and "Show a notification…" checkboxes (saved only; their behaviour comes in the next step), and OK/Cancel.
+- `UI\DeviceTableModel.cs`: the dialog's non-UI logic (merging the device list with saved settings, giving a newly ticked device the defaults, turning rows back into settings), covered by unit tests.
+- `UI\HotkeyCaptureBox.cs`: records a key combination, shows held modifiers (`Ctrl+Alt+…`), and rejects invalid combinations with a hint. Tab, Enter and Escape keep their dialog behaviour. Backspace/Delete returns to the hotkey the box started with.
+- The tray menu's "Settings…" opens the dialog (only one at a time; a second click brings it to the front). OK saves the file, hands the device settings to the toggle service and updates the menu.
+- 39 new tests (349 in total).
+
+#### Reasoning
+
+- **The dialog registers the new hotkey on OK:** if the combination is taken, the dialog stays open with the error, and `HotkeyManager` keeps the old hotkey registered. A failed change never leaves the app without a hotkey.
+- **The hotkey is suspended while the hotkey box has focus:** a registered hotkey is delivered as `WM_HOTKEY` instead of as key presses, so without this the current hotkey couldn't be typed into the box (and pressing it would toggle the volume). It's registered again when the box loses focus or the dialog closes.
+- **Keys are captured in `ProcessCmdKey`:** a read-only `TextBox` with shortcuts disabled swallows combinations like Ctrl+Shift+V or Ctrl+A before `KeyDown` fires.
+- **Modeless dialog:** the tray menu and the hotkey keep working while settings are open, and the dialog shows in the taskbar because the app has no other window.
+- **New devices aren't selected automatically:** with saved settings, which devices are reduced is the user's choice. Silently adding every new device (e.g. a Bluetooth headset) would change that behind their back.
+- **Never-configured devices aren't saved:** only devices that were ticked at some point, or already saved, are written to the file, so it doesn't fill up with every device Windows has ever listed.
+- **Relaxed JSON escaping:** the file stays readable and hand-editable (`"Ctrl+Alt+V"` instead of `"Ctrl+Alt+V"`, non-ASCII device names as they are).
+- **An unreadable file is only overwritten after it was backed up:** if the backup copy fails, the app runs with defaults but doesn't save over the original.
+
+---
+
 ### 2026-11-20 13:36: Tray icon and app wiring
 
 #### Summary

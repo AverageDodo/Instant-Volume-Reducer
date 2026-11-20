@@ -17,7 +17,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private const int BalloonTimeoutMs = 4000;
 
     private readonly CoreAudioDeviceService _audio;
-    private readonly AppSettings _settings;
+    private readonly SettingsStore _store;
+    private AppSettings _settings;
     private readonly VolumeToggleService _toggle;
     private readonly HotkeyManager _hotkeys;
     private readonly TrayIcons _icons;
@@ -25,6 +26,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _toggleItem;
     private readonly Font _boldMenuFont;
     private readonly NotifyIcon _notifyIcon;
+    private SettingsForm? _settingsForm;
     private bool _shutDown;
 
     public TrayApplicationContext()
@@ -38,9 +40,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _audio = new CoreAudioDeviceService();
 
-        // Until settings are persisted, every active output device is selected with the default reduction.
-        _settings = new AppSettings();
-        AddNewActiveDevices();
+        _store = new SettingsStore();
+        var loaded = _store.Load();
+        _settings = loaded.Settings;
+        bool saveSettings;
+        if (loaded.Status == SettingsLoadStatus.Loaded)
+        {
+            saveSettings = DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices());
+        }
+        else
+        {
+            // First run (or an unreadable file): select every active output device, so the hotkey works
+            // right away. Don't overwrite an unreadable file that couldn't be backed up first.
+            DeviceConfigUpdater.EnableAllActive(_settings, _audio.GetOutputDevices());
+            saveSettings = loaded.Status == SettingsLoadStatus.Missing || loaded.BackupPath is not null;
+        }
 
         _toggle = new VolumeToggleService(_audio, _settings.Devices);
         _toggle.StateChanged += OnToggleStateChanged;
@@ -55,7 +69,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Font = _boldMenuFont, // Bold marks the double-click action.
         };
         _menu.Items.Add(_toggleItem);
-        _menu.Items.Add(new ToolStripMenuItem("Settings…") { Enabled = false });
+        _menu.Items.Add(new ToolStripMenuItem("Settings…", null, (_, _) => OpenSettings()));
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
@@ -74,6 +88,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Visible = true;
 
         RegisterHotkey();
+
+        if (saveSettings)
+        {
+            SaveSettings();
+        }
+
+        if (loaded.Status == SettingsLoadStatus.Corrupt)
+        {
+            ShowBalloon(
+                loaded.BackupPath is null
+                    ? "The settings file couldn't be read, so the default settings are used."
+                    : $"The settings file couldn't be read, so the default settings are used. The old file was kept as {Path.GetFileName(loaded.BackupPath)}.",
+                ToolTipIcon.Warning);
+        }
 
         Application.ApplicationExit += OnApplicationExit;
         SystemEvents.SessionEnding += OnSessionEnding;
@@ -141,41 +169,84 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        if (AddNewActiveDevices())
+        // New devices aren't selected automatically; they show up in the settings dialog. Only keep the
+        // saved names current, so disconnected devices are listed under their latest name.
+        if (DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices()))
         {
-            _toggle.UpdateDeviceConfigs(_settings.Devices);
+            SaveSettings();
+        }
+    }
+
+    /// <summary>Opens the settings dialog, or brings it to the front if it's already open.</summary>
+    private void OpenSettings()
+    {
+        if (_shutDown)
+        {
+            return;
+        }
+
+        if (_settingsForm is { IsDisposed: false } open)
+        {
+            if (open.WindowState == FormWindowState.Minimized)
+            {
+                open.WindowState = FormWindowState.Normal;
+            }
+
+            open.Activate();
+            return;
+        }
+
+        var form = new SettingsForm(_settings, _audio, _hotkeys, _icons.Normal);
+        form.FormClosed += OnSettingsFormClosed;
+        _settingsForm = form;
+        form.Show();
+        form.Activate();
+    }
+
+    private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
+    {
+        if (sender is not SettingsForm form)
+        {
+            return;
+        }
+
+        form.FormClosed -= OnSettingsFormClosed;
+        if (ReferenceEquals(_settingsForm, form))
+        {
+            _settingsForm = null;
+        }
+
+        // A modeless form disposes itself after closing; its Result stays readable.
+        var result = form.DialogResult == DialogResult.OK ? form.Result : null;
+        if (result is not null && !_shutDown)
+        {
+            ApplySettings(result);
         }
     }
 
     /// <summary>
-    /// Adds active output devices that aren't in the settings yet (enabled, with the default reduction)
-    /// and refreshes the names of known ones. Returns <c>true</c> if a device was added.
+    /// Takes over the settings from the dialog. The dialog already registered the new hotkey; this saves
+    /// the file and hands the device settings to the toggle service.
     /// </summary>
-    private bool AddNewActiveDevices()
+    private void ApplySettings(AppSettings settings)
     {
-        var added = false;
-        foreach (var device in _audio.GetOutputDevices())
-        {
-            var existing = _settings.Devices.Find(d => string.Equals(d.DeviceId, device.Id, StringComparison.OrdinalIgnoreCase));
-            if (existing is not null)
-            {
-                existing.LastKnownName = device.Name;
-            }
-            else if (device.IsActive)
-            {
-                _settings.Devices.Add(new DeviceReductionConfig
-                {
-                    DeviceId = device.Id,
-                    LastKnownName = device.Name,
-                    Enabled = true,
-                    Mode = _settings.DefaultMode,
-                    Amount = _settings.DefaultAmount,
-                });
-                added = true;
-            }
-        }
+        _settings = settings;
+        DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices());
+        SaveSettings();
+        _toggle.UpdateDeviceConfigs(_settings.Devices);
+        UpdateTrayState();
+    }
 
-        return added;
+    private void SaveSettings()
+    {
+        try
+        {
+            _store.Save(_settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowBalloon($"The settings couldn't be saved: {ex.Message}", ToolTipIcon.Warning);
+        }
     }
 
     private void UpdateTrayState()
@@ -230,6 +301,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SystemEvents.SessionEnding -= OnSessionEnding;
         _audio.DevicesChanged -= OnDevicesChanged;
         _toggle.StateChanged -= OnToggleStateChanged;
+
+        // Close the dialog first: closing it re-registers a hotkey it suspended, which needs the manager.
+        if (_settingsForm is { } form)
+        {
+            _settingsForm = null;
+            form.FormClosed -= OnSettingsFormClosed;
+            if (!form.IsDisposed)
+            {
+                form.Close(); // Disposes the modeless form; its changes are discarded.
+            }
+        }
 
         _toggle.Restore();
 
