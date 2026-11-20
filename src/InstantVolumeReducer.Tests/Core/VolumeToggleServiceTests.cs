@@ -397,4 +397,39 @@ public class VolumeToggleServiceTests
 
         Assert.False(service.IsReduced);
     }
+
+    [Fact]
+    public void Restore_ReportsRestoredAndSkippedDevices()
+    {
+        var audio = new FakeAudioDeviceService().Add("speakers", 0.8f).Add("headphones", 0.5f);
+        var service = new VolumeToggleService(audio, [Config("speakers"), Config("headphones")]);
+        service.Reduce();
+        audio.Unplug("headphones");
+
+        var result = service.Restore();
+
+        Assert.Equal(new RestoreResult(1, 1), result);
+    }
+
+    [Fact]
+    public void Restore_WhenNotReduced_ReportsNothing()
+    {
+        var audio = new FakeAudioDeviceService().Add("speakers", 0.8f);
+        var service = new VolumeToggleService(audio, [Config("speakers")]);
+
+        Assert.Equal(default, service.Restore());
+    }
+
+    [Fact]
+    public void SelectedDeviceCount_CountsEnabledDevicesConnectedOrNot()
+    {
+        var audio = new FakeAudioDeviceService().Add("speakers", 0.8f).Add("headphones", 0.5f, active: false);
+        var service = new VolumeToggleService(audio, [Config("speakers"), Config("headphones"), Config("hdmi", enabled: false)]);
+
+        Assert.Equal(2, service.SelectedDeviceCount);
+
+        service.UpdateDeviceConfigs([Config("speakers")]);
+
+        Assert.Equal(1, service.SelectedDeviceCount);
+    }
 }

@@ -40,6 +40,9 @@ public sealed class VolumeToggleService
     /// <summary><c>true</c> while at least one device is reduced.</summary>
     public bool IsReduced => State.IsReduced;
 
+    /// <summary>How many devices are enabled (selected) for reduction, connected or not.</summary>
+    public int SelectedDeviceCount => _rules.Count;
+
     /// <summary>
     /// Reduces if nothing is reduced, otherwise restores.
     /// </summary>
@@ -99,19 +102,30 @@ public sealed class VolumeToggleService
     /// while reduced. Devices that are no longer available are skipped and forgotten. Does nothing if
     /// not reduced.
     /// </summary>
-    public void Restore()
+    /// <returns>How many devices were restored and how many were skipped; both 0 if nothing was reduced.</returns>
+    public RestoreResult Restore()
     {
         if (!IsReduced)
         {
-            return;
+            return default;
         }
 
+        var restored = 0;
+        var skipped = 0;
         foreach (var device in State.Devices)
         {
-            _audio.TrySetVolume(device.DeviceId, device.OriginalVolume);
+            if (_audio.TrySetVolume(device.DeviceId, device.OriginalVolume))
+            {
+                restored++;
+            }
+            else
+            {
+                skipped++;
+            }
         }
 
         SetState(ReductionState.Empty);
+        return new RestoreResult(restored, skipped);
     }
 
     /// <summary>

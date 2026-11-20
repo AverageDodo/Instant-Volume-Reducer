@@ -18,6 +18,24 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:52: Start with Windows, toggle notifications and crash recovery
+
+#### Summary
+
+- **Start with Windows:** `Settings\AutostartManager.cs` writes or removes the value `InstantVolumeReducer` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, set to the quoted path of the running exe. It's applied whenever settings are saved and once at startup, which also repoints the entry if the exe was moved. Registry access goes through `IAutostartRegistry` (`RunKeyRegistry` for the real key, an in-memory fake in tests), and registry errors produce a tray warning instead of an exception.
+- **Toggle notifications:** with "Show a notification…" on, each toggle shows a short tray balloon ("Volume reduced on 2 devices.", "Volume restored."), including devices that were skipped because they aren't connected. The texts live in `UI\ToggleMessages.cs`. `VolumeToggleService.Restore()` now returns a `RestoreResult` (restored/skipped counts), and `SelectedDeviceCount` was added for the "skipped" count when reducing.
+- **Crash recovery:** `Core\ReductionStateStore.cs` keeps the current reduction in `%APPDATA%\InstantVolumeReducer\state.json` while the volume is reduced and deletes the file once nothing is reduced (after a restore, a normal exit and Windows sign-out). At startup, `Core\CrashRecovery.cs` restores the saved original volumes automatically if the file still exists, shows a notification, and deletes the file. A corrupt state file is moved to `state.json.bak` and reported; it never crashes the app.
+- The atomic temp-file-then-replace write from `SettingsStore` moved to `Settings\AtomicFile.cs`, so the settings and the state file share it.
+
+#### Reasoning
+
+- **The setting is the source of truth for autostart.** Applying it at startup in both directions keeps the Run key correct after the exe was moved, and removes a stale entry if the setting is off. One side effect: running a different copy of the exe (e.g. a debug build) with the setting on repoints the entry to that copy. A per-user Run key value needs no admin rights and is the standard way for a tray app to start at sign-in.
+- **Recovery restores automatically instead of asking.** After a crash the volume is still reduced, so the user almost certainly wants it back. Asking would add a dialog at sign-in for a decision that has only one sensible answer. Recovery uses the same rules as a normal restore: devices that aren't connected are skipped and forgotten, so a later restore can't unexpectedly change a device the user has used since.
+- **Notifications are shown even when turned off in two cases:** the startup recovery (the user should know why their volume changed) and a restore where devices were skipped (those devices lost their original volume). A reduce that skips unplugged devices only notifies when notifications are on, since that is a common, harmless situation (e.g. headphones selected but not plugged in).
+- **The state file only exists while something is reduced,** so its presence at startup is exactly the "didn't exit normally while reduced" signal, and a normal session leaves nothing behind.
+
+---
+
 ### 2026-11-20 13:45: Settings persistence and settings dialog
 
 #### Summary

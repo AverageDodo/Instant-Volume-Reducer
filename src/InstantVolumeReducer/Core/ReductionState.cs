@@ -11,6 +11,13 @@ namespace InstantVolumeReducer.Core;
 public sealed record ReducedDevice(string DeviceId, float OriginalVolume, float ReducedVolume);
 
 /// <summary>
+/// The outcome of <see cref="VolumeToggleService.Restore"/>.
+/// </summary>
+/// <param name="Restored">Devices set back to their original volume.</param>
+/// <param name="Skipped">Devices that couldn't be restored (not connected any more, or the volume couldn't be set).</param>
+public readonly record struct RestoreResult(int Restored, int Skipped);
+
+/// <summary>
 /// The saved reduction: which devices are reduced and what to restore them to.
 /// Immutable and JSON-serializable, so it can be written to disk for crash recovery.
 /// </summary>

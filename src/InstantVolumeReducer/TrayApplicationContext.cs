@@ -18,6 +18,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private readonly CoreAudioDeviceService _audio;
     private readonly SettingsStore _store;
+    private readonly ReductionStateStore _stateStore;
+    private readonly AutostartManager? _autostart;
     private AppSettings _settings;
     private readonly VolumeToggleService _toggle;
     private readonly HotkeyManager _hotkeys;
@@ -39,6 +41,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _audio = new CoreAudioDeviceService();
+
+        // If the app didn't exit normally while the volume was reduced, put the old volume back first.
+        _stateStore = new ReductionStateStore();
+        var recovery = CrashRecovery.Run(_stateStore, _audio);
+
+        var exePath = Environment.ProcessPath ?? Application.ExecutablePath;
+        _autostart = string.IsNullOrEmpty(exePath) ? null : new AutostartManager(new RunKeyRegistry(), exePath);
 
         _store = new SettingsStore();
         var loaded = _store.Load();
@@ -94,6 +103,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SaveSettings();
         }
 
+        // Keeps the Run key in line with the setting, and repoints it if the exe was moved.
+        ApplyAutostart();
+
         if (loaded.Status == SettingsLoadStatus.Corrupt)
         {
             ShowBalloon(
@@ -101,6 +113,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
                     ? "The settings file couldn't be read, so the default settings are used."
                     : $"The settings file couldn't be read, so the default settings are used. The old file was kept as {Path.GetFileName(loaded.BackupPath)}.",
                 ToolTipIcon.Warning);
+        }
+
+        // Shown last, since a later balloon replaces an earlier one and this one matters most. Shown even
+        // with notifications off: the user should know why their volume just changed.
+        if (ToggleMessages.Recovery(recovery) is { } recoveryMessage)
+        {
+            var allRestored = recovery is { Status: RecoveryStatus.Restored, Restore.Skipped: 0, StateCleared: true };
+            ShowBalloon(recoveryMessage, allRestored ? ToolTipIcon.Info : ToolTipIcon.Warning);
         }
 
         Application.ApplicationExit += OnApplicationExit;
@@ -144,11 +164,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         if (_toggle.IsReduced)
         {
-            _toggle.Restore();
+            var result = _toggle.Restore();
+            if (result.Skipped > 0)
+            {
+                // Always shown: those devices lost their original volume.
+                ShowBalloon(ToggleMessages.Restored(result), ToolTipIcon.Warning);
+            }
+            else if (_settings.ShowNotifications)
+            {
+                ShowBalloon(ToggleMessages.Restored(result), ToolTipIcon.Info);
+            }
         }
-        else if (!_toggle.Reduce())
+        else if (_toggle.Reduce())
         {
-            ShowBalloon("None of the selected output devices is connected, so nothing was reduced.", ToolTipIcon.Info);
+            if (_settings.ShowNotifications)
+            {
+                ShowBalloon(ToggleMessages.Reduced(_toggle.State.Devices.Count, _toggle.SelectedDeviceCount), ToolTipIcon.Info);
+            }
+        }
+        else
+        {
+            ShowBalloon(ToggleMessages.NothingReduced(_toggle.SelectedDeviceCount), ToolTipIcon.Info);
         }
     }
 
@@ -160,7 +196,47 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private void OnToggleStateChanged(object? sender, EventArgs e) => UpdateTrayState();
+    private void OnToggleStateChanged(object? sender, EventArgs e)
+    {
+        PersistState();
+        UpdateTrayState();
+    }
+
+    /// <summary>
+    /// Writes the current reduction to the state file (or deletes the file once nothing is reduced), so a
+    /// crash while reduced can be recovered from on the next start.
+    /// </summary>
+    private void PersistState()
+    {
+        try
+        {
+            _stateStore.Save(_toggle.State);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowBalloon($"The current volume levels couldn't be saved for recovery: {ex.Message}", ToolTipIcon.Warning);
+        }
+    }
+
+    /// <summary>Makes the Windows autostart entry match the "Start with Windows" setting.</summary>
+    private void ApplyAutostart()
+    {
+        if (_autostart is null)
+        {
+            if (_settings.StartWithWindows)
+            {
+                ShowBalloon("Start with Windows couldn't be set up: the app's location is unknown.", ToolTipIcon.Warning);
+            }
+
+            return;
+        }
+
+        var result = _autostart.Apply(_settings.StartWithWindows);
+        if (!result.Success)
+        {
+            ShowBalloon($"Start with Windows couldn't be changed: {result.Error}", ToolTipIcon.Warning);
+        }
+    }
 
     private void OnDevicesChanged(object? sender, EventArgs e)
     {
@@ -233,6 +309,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _settings = settings;
         DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices());
         SaveSettings();
+        ApplyAutostart();
         _toggle.UpdateDeviceConfigs(_settings.Devices);
         UpdateTrayState();
     }
@@ -313,7 +390,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
         }
 
+        // StateChanged is already unsubscribed, so delete the state file here: after a normal exit there is
+        // nothing to recover on the next start.
         _toggle.Restore();
+        PersistState();
 
         _hotkeys.Dispose();
 

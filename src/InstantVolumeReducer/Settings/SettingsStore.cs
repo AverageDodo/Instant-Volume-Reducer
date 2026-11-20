@@ -92,29 +92,7 @@ public sealed class SettingsStore
     public void Save(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-
-        var directory = Path.GetDirectoryName(FilePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        var tempPath = FilePath + ".tmp";
-        try
-        {
-            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, settings, JsonOptions);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(tempPath, FilePath, overwrite: true);
-        }
-        catch
-        {
-            TryDelete(tempPath);
-            throw;
-        }
+        AtomicFile.WriteJson(FilePath, settings, JsonOptions);
     }
 
     /// <summary>
@@ -169,18 +147,6 @@ public sealed class SettingsStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Best effort: a leftover temp file is overwritten by the next save.
         }
     }
 }
