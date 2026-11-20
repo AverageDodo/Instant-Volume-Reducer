@@ -18,6 +18,27 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:26: Core Audio device service
+
+#### Summary
+
+Added the audio layer in `src\InstantVolumeReducer\Audio\`:
+
+- `IAudioDeviceService` with `GetOutputDevices()`, `IsDeviceAvailable(id)`, `TryGetVolume(id, out volume)`, `TrySetVolume(id, volume)` and a `DevicesChanged` event, plus the `AudioDeviceInfo(Id, Name, IsActive)` record.
+- `CoreAudioDeviceService`, the NAudio implementation (`MMDeviceEnumerator`, `AudioEndpointVolume.MasterVolumeLevelScalar`).
+- `VolumeLevel.Clamp`, which keeps volume scalars in the 0.0–1.0 range, with unit tests.
+
+#### Reasoning
+
+- **`Try…` methods instead of exceptions:** devices can be unplugged or disabled at any moment, so a missing device is a normal case, not an error. The toggle logic just checks the return value. Only device-related exceptions (COM, invalid operation, argument, access) are caught; anything else is still a bug and propagates.
+- **Devices are addressed by their endpoint ID string:** the ID stays stable across renames and reconnects. It's the key the settings and saved reduction state use.
+- **Volumes are `float` scalars from 0.0 to 1.0:** this matches Core Audio and the Windows volume slider. Values are clamped on read and write, and NaN becomes 0.
+- **The device list includes active and unplugged devices,** with an `IsActive` flag. That way the settings dialog can show known but disconnected devices. Disabled and removed endpoints are left out because they can't be used.
+- **`DevicesChanged` is never raised on the Windows audio notification thread:** that thread holds an internal lock and must not call back into the audio stack. The event is posted to the synchronization context captured when the service is created (the UI thread), or to the thread pool if there is none. Handlers can therefore safely re-query devices.
+- **Small interface, no `IDisposable` on it:** the toggle service only needs the methods above and can be unit-tested with a simple fake. The owner of `CoreAudioDeviceService` (the tray app) disposes it.
+
+---
+
 ### 2026-11-20 13:23: Project setup and technology decisions
 
 #### Summary
