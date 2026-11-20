@@ -18,6 +18,30 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-20 13:29: Volume toggle service with per-device reduction
+
+#### Summary
+
+Added the toggle logic and the models it uses:
+
+- `Settings\AppSettings.cs`: `AppSettings` (hotkey text, per-device list, default mode and amount, start with Windows, notifications), `DeviceReductionConfig` (`DeviceId`, `LastKnownName`, `Enabled`, `Mode`, `Amount` 0–100) and the `ReductionMode` enum (Relative, Absolute). The settings are JSON-serializable; loading and saving follow in a later step.
+- `Core\ReductionState.cs`: an immutable, JSON-serializable record of the reduced devices with their original and applied volume. `IsReduced` is derived from the device list.
+- `Core\ReductionCalculator.cs`: computes the reduced volume for a mode and amount.
+- `Core\VolumeToggleService.cs`: `Toggle()`, `Reduce()`, `Restore()`, `UpdateDeviceConfigs(...)`, `State`, `IsReduced` and a `StateChanged` event. It can be constructed from a saved `ReductionState` for crash recovery.
+- 48 new unit tests using an in-memory fake device service (56 tests in total).
+
+#### Reasoning
+
+- **Absolute mode never raises the volume:** if a device is already quieter than the absolute target, it stays at its current level. A "reduce" hotkey that makes something louder would be surprising.
+- **Restore always returns to the saved original volume,** even if the volume was changed by hand while reduced. This is the simple, predictable behaviour from the plan; respecting manual changes can be added later as an option.
+- **Unavailable devices are skipped:** devices that are unplugged, or whose volume can't be read or set, are not reduced. If no device could be reduced, the app stays not reduced, so the next press tries to reduce again instead of doing a no-op "restore". When restoring, devices that are gone are skipped and forgotten. Downside: if such a device is plugged back in, it keeps the reduced level that Windows remembers for it.
+- **Changing the selection while reduced:** devices that are deselected or removed are restored right away, so they can't get stuck at a reduced level. Mode and amount changes, and newly enabled devices, take effect on the next reduction. Re-applying a different level mid-reduction would require deciding how it relates to manual changes, and isn't needed for the toggle use case.
+- **The service keeps its own copy of the configs** (enabled entries only, first entry wins for duplicate IDs, compared case-insensitively). The settings dialog can then edit its objects freely without affecting a reduction in progress.
+- **Persistence through the `StateChanged` event:** instead of a separate storage interface, the event fires after every change, and the subscriber can read `State` and save it. One mechanism serves both crash recovery and the tray icon update.
+- **Single-threaded by design:** the hotkey, tray menu and device-change events all arrive on the UI thread, so no locking is needed.
+
+---
+
 ### 2026-11-20 13:26: Core Audio device service
 
 #### Summary
