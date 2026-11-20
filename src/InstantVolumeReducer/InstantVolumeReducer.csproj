@@ -13,6 +13,8 @@
     <Product>Instant Volume Reducer</Product>
     <AssemblyTitle>Instant Volume Reducer</AssemblyTitle>
     <Description>Reduces the volume of selected audio output devices with a global hotkey and restores it on the next press.</Description>
+    <!-- The release version (SemVer, e.g. 0.2.0 or 0.3.0-beta.1). Raise it on develop before merging into
+         main: the release workflow tags and publishes it as v<Version> when it isn't released yet. -->
     <Version>0.1.0</Version>
   </PropertyGroup>
 

@@ -18,7 +18,7 @@ namespace InstantVolumeReducer.UI;
 /// </remarks>
 internal sealed class SettingsForm : Form
 {
-    private const string Title = "Instant Volume Reducer – Settings";
+    private static readonly string Title = $"{AppInfo.Name} {AppInfo.Version} – Settings";
 
     private static readonly ModeItem[] ModeItems =
     [

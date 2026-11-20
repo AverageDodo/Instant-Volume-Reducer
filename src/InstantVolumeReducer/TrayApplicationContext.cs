@@ -13,7 +13,7 @@ namespace InstantVolumeReducer;
 /// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
-    private const string AppName = "Instant Volume Reducer";
+    private const string AppName = AppInfo.Name;
     private const int BalloonTimeoutMs = 4000;
 
     private readonly CoreAudioDeviceService _audio;
@@ -74,6 +74,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _menu = new ContextMenuStrip();
         _boldMenuFont = new Font(_menu.Font, FontStyle.Bold);
+
+        // A greyed-out header, so it's easy to tell which release is running.
+        _menu.Items.Add(new ToolStripMenuItem($"{AppName} {AppInfo.Version}") { Enabled = false });
+        _menu.Items.Add(new ToolStripSeparator());
+
         _toggleItem = new ToolStripMenuItem("Reduce volume", null, (_, _) => ToggleVolume())
         {
             Font = _boldMenuFont, // Bold marks the double-click action.

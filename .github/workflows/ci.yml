@@ -1,0 +1,79 @@
+# Builds and tests every push to develop and every pull request into develop or main.
+# Pull requests into main also get a release check: they must come from develop, and the version in
+# src/InstantVolumeReducer/InstantVolumeReducer.csproj must not be lower than the latest release.
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: windows-latest # WinForms (net10.0-windows) builds on Windows.
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build src --configuration Release
+
+      - name: Test
+        run: dotnet test src --configuration Release --no-build
+
+  release-check:
+    name: Release check
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest # Only reads files and tags, so the cheaper Linux runner is enough.
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # The release tags are needed to compare versions.
+
+      - name: Check source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if ($env:HEAD_REF -ne 'develop') {
+            Write-Output "::error::Pull requests into main must come from develop, not '$env:HEAD_REF'."
+            exit 1
+          }
+
+      - name: Check version
+        run: |
+          $info = ./.github/scripts/Get-ReleaseInfo.ps1
+          $latest = if ($info.LatestRelease) { "v$($info.LatestRelease)" } else { 'none' }
+          switch ($info.Status) {
+            'release' {
+              $message = "Merging this pull request releases $($info.Tag)$(if ($info.IsPrerelease) { ' (pre-release)' }). Latest release: $latest."
+              Write-Output "::notice::$message"
+            }
+            'already-released' {
+              $message = "$($info.Tag) is already released, so merging won't create a release. Raise <Version> in the project file to release."
+              Write-Output "::warning::$message"
+            }
+            'older' {
+              $message = "Version $($info.Version) is lower than the latest release ($latest). Raise <Version> in the project file."
+              Write-Output "::error::$message"
+            }
+          }
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "### Release check`n`n$message"
+          if ($info.Status -eq 'older') { exit 1 }

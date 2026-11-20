@@ -1,0 +1,93 @@
+# Publishes a GitHub release whenever main gets a version that isn't released yet.
+#
+# The version is <Version> in src/InstantVolumeReducer/InstantVolumeReducer.csproj. On every push to main
+# (normally a merged pull request from develop):
+#   - tag v<Version> already exists     -> nothing to release, the run ends successfully
+#   - version lower than latest release -> the run fails
+#   - otherwise                         -> build, test, publish, then create tag v<Version> on this commit
+#                                          and the release with the exe and its SHA-256 checksum
+# The tag is only created after the build and tests pass, so a failed run leaves no tag behind.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # Needed to create the tag and the release.
+
+concurrency:
+  group: release
+  cancel-in-progress: false # Never cancel a release half-way.
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # The release tags are needed to compare versions.
+
+      - name: Read version
+        id: info
+        run: |
+          $info = ./.github/scripts/Get-ReleaseInfo.ps1
+          switch ($info.Status) {
+            'release' { Write-Output "::notice::Releasing $($info.Tag)$(if ($info.IsPrerelease) { ' as a pre-release' })." }
+            'already-released' { Write-Output "::notice::$($info.Tag) is already released, so there is nothing to release. Raise <Version> in the project file to release." }
+            'older' {
+              Write-Output "::error::Version $($info.Version) is lower than the latest release (v$($info.LatestRelease)). Raise <Version> in the project file."
+              exit 1
+            }
+          }
+
+      - name: Set up .NET
+        if: steps.info.outputs.status == 'release'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        if: steps.info.outputs.status == 'release'
+        run: dotnet test src --configuration Release
+
+      - name: Publish
+        if: steps.info.outputs.status == 'release'
+        run: dotnet publish src/InstantVolumeReducer/InstantVolumeReducer.csproj -p:PublishProfile=win-x64
+
+      - name: Package
+        if: steps.info.outputs.status == 'release'
+        env:
+          TAG: ${{ steps.info.outputs.tag }}
+        run: |
+          $name = "InstantVolumeReducer-$env:TAG-win-x64.exe"
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          Copy-Item -LiteralPath src/InstantVolumeReducer/bin/publish/win-x64/InstantVolumeReducer.exe -Destination "artifacts/$name"
+          $hash = (Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          # sha256sum format, so `sha256sum -c` works as well as comparing by eye.
+          Set-Content -LiteralPath "artifacts/$name.sha256" -Value "$hash  $name" -Encoding ascii
+          Get-ChildItem artifacts | Format-Table Name, Length
+
+      - name: Create tag and release
+        if: steps.info.outputs.status == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+          PRERELEASE: ${{ steps.info.outputs.prerelease }}
+        run: |
+          $name = "InstantVolumeReducer-$env:TAG-win-x64.exe"
+          $ghArgs = @(
+            'release', 'create', $env:TAG,
+            "artifacts/$name", "artifacts/$name.sha256",
+            '--target', $env:GITHUB_SHA,
+            '--title', "Instant Volume Reducer $env:TAG",
+            '--generate-notes'
+          )
+          $ghArgs += if ($env:PRERELEASE -eq 'true') { '--prerelease' } else { '--latest' }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
