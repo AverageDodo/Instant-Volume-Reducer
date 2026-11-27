@@ -5,11 +5,12 @@
 #   - tag v<Version> already exists     -> nothing to release, the run ends successfully
 #   - version lower than latest release -> the run fails
 #   - otherwise                         -> build, test, publish, build the Velopack installer and update
-#                                          packages, then create tag v<Version> on this commit and the
-#                                          release with the installer, the portable exe, their SHA-256
-#                                          checksums, and the update packages and feed
-# The tag is only created after the build, tests and packaging pass, so those failures leave no tag
-# behind. If only the final upload fails, delete the release and its tag before re-running.
+#                                          packages, assemble a draft release with the installer, the
+#                                          portable exe, their SHA-256 checksums, and the update packages
+#                                          and feed, then publish it, which creates tag v<Version> on this
+#                                          commit
+# Releases are immutable once published, so nothing is published until every file is attached. A
+# failed run leaves at most a draft (and no tag); re-running the workflow removes the draft.
 name: Release
 
 on:
@@ -17,7 +18,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write # Needed to create the tag and the release.
+  contents: write # Needed to create the release (and with it the tag).
 
 concurrency:
   group: release
@@ -125,44 +126,87 @@ jobs:
           }
           Get-ChildItem artifacts | Format-Table Name, Length
 
-      - name: Create tag and release
-        if: steps.info.outputs.status == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.info.outputs.tag }}
-          PRERELEASE: ${{ steps.info.outputs.prerelease }}
-        run: |
-          $ghArgs = @('release', 'create', $env:TAG) + @((Get-ChildItem artifacts).FullName) + @(
-            '--target', $env:GITHUB_SHA,
-            '--title', "Instant Volume Reducer $env:TAG",
-            '--generate-notes'
-          )
-          $ghArgs += if ($env:PRERELEASE -eq 'true') { '--prerelease' } else { '--latest' }
-          gh @ghArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # The repository has immutable releases turned on: once published, a release's files can't change.
+      # So the release is assembled as a draft and published only when every file is attached. Until
+      # then no tag exists, and a failed run leaves at most a draft, which the next run removes.
 
-      - name: Upload installer and update packages
+      - name: Remove a draft left by an earlier failed run
+        if: steps.info.outputs.status == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+        run: |
+          $isDraft = gh release view $env:TAG --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($isDraft -ne 'true') {
+              Write-Output "::error::A published release $env:TAG already exists without its tag. Check the releases page."
+              exit 1
+            }
+            Write-Output "::notice::Removing the draft release $env:TAG left by an earlier run."
+            gh release delete $env:TAG --yes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          exit 0
+
+      - name: Create draft release with installer and update packages
         if: steps.info.outputs.status == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.info.outputs.tag }}
           PRERELEASE: ${{ steps.info.outputs.prerelease }}
         run: |
-          # Adds the setup, this version's packages and the releases.win.json feed to the release created
-          # above. Installed copies find updates through that feed.
+          # Velopack uploads the setup, this version's packages and the releases.win.json feed that
+          # installed copies read, in the layout its GitHub update source expects.
           $uploadArgs = @(
             'vpk', 'upload', 'github',
             '--repoUrl', "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY",
             '--token', $env:GH_TOKEN,
             '--outputDir', 'velopack',
             '--tag', $env:TAG,
-            '--releaseName', "Instant Volume Reducer $env:TAG",
-            '--merge',
-            '--publish'
+            '--targetCommitish', $env:GITHUB_SHA,
+            '--releaseName', "Instant Volume Reducer $env:TAG"
           )
           if ($env:PRERELEASE -eq 'true') { $uploadArgs += '--pre' }
           dotnet @uploadArgs
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error::The release $env:TAG was created, but the installer upload failed. Delete the release and its tag, then re-run this workflow."
-            exit $LASTEXITCODE
-          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Add portable exe and checksums
+        if: steps.info.outputs.status == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+        run: |
+          $ghArgs = @('release', 'upload', $env:TAG) + @((Get-ChildItem artifacts).FullName)
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish release
+        if: steps.info.outputs.status == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+          PRERELEASE: ${{ steps.info.outputs.prerelease }}
+        run: |
+          # Notes from the pull requests merged since the previous release, as `--generate-notes` would
+          # write them; publishing creates the tag on this commit and makes the release immutable.
+          $notes = gh api "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" -f "tag_name=$env:TAG" -f "target_commitish=$env:GITHUB_SHA" --jq .body
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          Set-Content -LiteralPath $notesFile -Value $notes -Encoding utf8
+
+          $ghArgs = @(
+            'release', 'edit', $env:TAG,
+            '--draft=false',
+            '--target', $env:GITHUB_SHA,
+            '--title', "Instant Volume Reducer $env:TAG",
+            '--notes-file', $notesFile
+          )
+          $ghArgs += if ($env:PRERELEASE -eq 'true') { '--prerelease' } else { '--latest' }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Explain a failed release
+        if: failure() && steps.info.outputs.status == 'release'
+        env:
+          TAG: ${{ steps.info.outputs.tag }}
+        run: Write-Output "::error::$env:TAG wasn't published. At most a draft release exists; re-running this workflow removes it and starts over."
