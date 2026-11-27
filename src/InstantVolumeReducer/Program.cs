@@ -11,6 +11,10 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // Must come first: during install, update and uninstall, Velopack starts the exe to run a hook, and
+        // the process exits in here. It also applies a downloaded update on a normal start.
+        Updates.InstallHooks.Run();
+
         using var mutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {

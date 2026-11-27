@@ -3,6 +3,7 @@ using InstantVolumeReducer.Core;
 using InstantVolumeReducer.Hotkeys;
 using InstantVolumeReducer.Settings;
 using InstantVolumeReducer.UI;
+using InstantVolumeReducer.Updates;
 using Microsoft.Win32;
 
 namespace InstantVolumeReducer;
@@ -15,6 +16,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private const string AppName = AppInfo.Name;
     private const int BalloonTimeoutMs = 4000;
+    private const int FirstUpdateCheckDelayMs = 60 * 1000;
+    private const int UpdateCheckIntervalMs = 12 * 60 * 60 * 1000;
 
     private readonly CoreAudioDeviceService _audio;
     private readonly SettingsStore _store;
@@ -29,6 +32,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Font _boldMenuFont;
     private readonly NotifyIcon _notifyIcon;
     private readonly ReductionOverlay _overlay;
+    private readonly UpdateCoordinator _updates;
+    private readonly System.Windows.Forms.Timer _updateTimer;
+    private readonly ToolStripMenuItem _checkUpdatesItem;
+    private readonly ToolStripMenuItem _installUpdateItem;
+    private Action? _balloonClickAction;
+    private string? _announcedUpdateVersion;
     private SettingsForm? _settingsForm;
     private bool _shutDown;
 
@@ -86,6 +95,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
         _menu.Items.Add(_toggleItem);
         _menu.Items.Add(new ToolStripMenuItem("Settings…", null, (_, _) => OpenSettings()));
+
+        _updates = new UpdateCoordinator(CreateUpdateClient());
+        _updates.StateChanged += (_, _) => UpdateUpdateMenu();
+        _checkUpdatesItem = new ToolStripMenuItem("Check for updates…", null, (_, _) => _ = CheckForUpdatesAsync(userInitiated: true));
+        _installUpdateItem = new ToolStripMenuItem("Restart to install update", null, (_, _) => InstallUpdate());
+        _menu.Items.Add(_checkUpdatesItem);
+        _menu.Items.Add(_installUpdateItem);
+        UpdateUpdateMenu();
+
+        // The first check runs shortly after start (not during sign-in, when everything starts at once),
+        // then twice a day.
+        _updateTimer = new System.Windows.Forms.Timer { Interval = FirstUpdateCheckDelayMs };
+        _updateTimer.Tick += (_, _) =>
+        {
+            _updateTimer.Interval = UpdateCheckIntervalMs;
+            _ = CheckForUpdatesAsync(userInitiated: false);
+        };
+
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
@@ -96,6 +123,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = _menu,
         };
         _notifyIcon.MouseDoubleClick += OnNotifyIconDoubleClick;
+        _notifyIcon.BalloonTipClicked += OnBalloonTipClicked;
 
         _overlay = new ReductionOverlay();
 
@@ -114,6 +142,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         // Keeps the Run key in line with the setting, and repoints it if the exe was moved.
         ApplyAutostart();
+        ApplyUpdateSchedule();
 
         if (loaded.Status == SettingsLoadStatus.Corrupt)
         {
@@ -227,6 +256,130 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private static IUpdateClient CreateUpdateClient()
+    {
+        try
+        {
+            return VelopackUpdateClient.Create();
+        }
+        catch (Exception)
+        {
+            // Without a working update system the app still works; it just behaves like a portable copy.
+            return new UnavailableUpdateClient();
+        }
+    }
+
+    /// <summary>Runs the automatic update checks only in an installed copy with the setting on.</summary>
+    private void ApplyUpdateSchedule()
+    {
+        if (_updates.IsInstalled && _settings.CheckForUpdates)
+        {
+            _updateTimer.Start();
+        }
+        else
+        {
+            _updateTimer.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Checks for and downloads a new version. Automatic checks stay quiet unless a new version was just
+    /// downloaded; a check the user asked for always reports its result.
+    /// </summary>
+    private async Task CheckForUpdatesAsync(bool userInitiated)
+    {
+        if (_shutDown)
+        {
+            return;
+        }
+
+        UpdateCheckResult result;
+        try
+        {
+            result = await _updates.CheckAndDownloadAsync();
+        }
+        catch (Exception ex)
+        {
+            result = new UpdateCheckResult(UpdateCheckOutcome.Failed, Error: ex.Message);
+        }
+
+        if (_shutDown)
+        {
+            return;
+        }
+
+        switch (result.Outcome)
+        {
+            case UpdateCheckOutcome.Ready when userInitiated || result.Version != _announcedUpdateVersion:
+                _announcedUpdateVersion = result.Version;
+                ShowBalloon(UpdateMessages.Ready(result.Version!), ToolTipIcon.Info, InstallUpdate);
+                break;
+            case UpdateCheckOutcome.UpToDate when userInitiated:
+                ShowBalloon(UpdateMessages.UpToDate(AppInfo.Version), ToolTipIcon.Info);
+                break;
+            case UpdateCheckOutcome.Failed when userInitiated:
+                ShowBalloon(UpdateMessages.Failed(result.Error), ToolTipIcon.Warning);
+                break;
+            case UpdateCheckOutcome.Busy when userInitiated:
+                ShowBalloon(UpdateMessages.Busy, ToolTipIcon.Info);
+                break;
+            case UpdateCheckOutcome.NotInstalled when userInitiated:
+                ShowBalloon(UpdateMessages.NotInstalled, ToolTipIcon.Info);
+                break;
+        }
+
+        UpdateUpdateMenu();
+    }
+
+    /// <summary>
+    /// Starts the updater and exits normally (which restores a reduced volume first). The updater waits
+    /// for the exit, installs the new version and starts it.
+    /// </summary>
+    private void InstallUpdate()
+    {
+        if (_shutDown)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_updates.ApplyAfterExit())
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowBalloon(UpdateMessages.ApplyFailed(ex.Message), ToolTipIcon.Warning);
+            return;
+        }
+
+        ExitThread();
+    }
+
+    private void UpdateUpdateMenu()
+    {
+        if (_shutDown)
+        {
+            return;
+        }
+
+        _checkUpdatesItem.Visible = _updates.IsInstalled;
+        _checkUpdatesItem.Enabled = !_updates.IsBusy;
+        _checkUpdatesItem.Text = _updates.IsBusy ? "Checking for updates…" : "Check for updates…";
+
+        _installUpdateItem.Visible = _updates.ReadyVersion is not null;
+        _installUpdateItem.Text = $"Restart to install version {_updates.ReadyVersion}";
+    }
+
+    private void OnBalloonTipClicked(object? sender, EventArgs e)
+    {
+        var action = _balloonClickAction;
+        _balloonClickAction = null;
+        action?.Invoke();
+    }
+
     /// <summary>Makes the Windows autostart entry match the "Start with Windows" setting.</summary>
     private void ApplyAutostart()
     {
@@ -302,7 +455,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        var form = new SettingsForm(_settings, _audio, _hotkeys, _icons.Normal);
+        var form = new SettingsForm(_settings, _audio, _hotkeys, _icons.Normal, _updates.IsInstalled);
         form.FormClosed += OnSettingsFormClosed;
         _settingsForm = form;
         form.Show();
@@ -340,6 +493,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         DeviceConfigUpdater.RefreshNames(_settings, _audio.GetOutputDevices());
         SaveSettings();
         ApplyAutostart();
+        ApplyUpdateSchedule();
         _toggle.UpdateDeviceConfigs(_settings.Devices, _settings.WindowsDefaultDevice);
         UpdateTrayState();
     }
@@ -377,10 +531,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _overlay.Update(_settings.Overlay, reduced);
     }
 
-    private void ShowBalloon(string text, ToolTipIcon icon)
+    /// <param name="onClick">What clicking the balloon does; <c>null</c> for nothing.</param>
+    private void ShowBalloon(string text, ToolTipIcon icon, Action? onClick = null)
     {
         if (!_shutDown)
         {
+            // A new balloon replaces the previous one, so its click action replaces the previous one's too.
+            _balloonClickAction = onClick;
             _notifyIcon.ShowBalloonTip(BalloonTimeoutMs, AppName, text, icon);
         }
     }
@@ -430,6 +587,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _hotkeys.Dispose();
         _overlay.Dispose();
+        _updateTimer.Dispose();
+        _notifyIcon.BalloonTipClicked -= OnBalloonTipClicked;
 
         // Hide before disposing so no ghost icon stays in the notification area.
         _notifyIcon.Visible = false;

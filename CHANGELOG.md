@@ -18,6 +18,40 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 12:52: Installer and automatic updates with Velopack
+
+#### Summary
+
+- **Velopack** (NuGet `Velopack` 1.2.161, packaging tool `vpk` 1.2.161 as a local tool in `dotnet-tools.json`) provides the installer and in-app updates.
+  - `InstantVolumeReducer-win-Setup.exe` installs per user without admin rights to `%LocalAppData%\InstantVolumeReducer`, with a Start menu shortcut (no desktop shortcut) and an entry in Settings → Apps.
+- **Startup:** `Program.Main` first runs `Updates\InstallHooks.Run()` (`VelopackApp.Build()…Run()`), which also applies a downloaded update on start.
+- **Uninstall hook:** restores a still-reduced volume from `state.json` and removes the "Start with Windows" entry. Settings in `%APPDATA%` are kept.
+- **Updates** (`Updates\UpdateCoordinator`, `Updates\VelopackUpdateClient`):
+  - The installed app checks the repository's GitHub releases 1 minute after start and then every 12 hours, and downloads a new version in the background.
+  - A notification and the tray item "Restart to install version …" install it; otherwise it's installed on the next start.
+  - The tray also has "Check for updates…".
+  - New setting `CheckForUpdates` (on by default) in the settings dialog.
+  - Pre-releases are only offered to copies that run a pre-release.
+  - `INSTANTVOLUMEREDUCER_UPDATE_SOURCE` points the app at a local folder for testing.
+- **Release workflow:**
+  - After publishing, it restores `vpk`, downloads the previous release's package (for a delta package) and runs `vpk pack`.
+  - `gh release create` creates the tag and the release with the portable exe and `.sha256` files for the exe and the setup.
+  - `vpk upload github --merge` then adds the setup, the update packages and the `releases.win.json` feed to the same release.
+- **README:** the Download section now recommends the installer and explains what the portable exe means (no updates, its location matters, no uninstaller). New sections for uninstalling and for building the installer.
+- `.gitignore`: local `velopack/` and `Releases/` output.
+
+#### Reasoning
+
+- **Velopack over Inno Setup, WiX and MSIX:** it combines a per-user installer with delta updates from GitHub Releases. That matters for a tray app that runs all day, whose users rarely download new versions themselves. MSIX needs a trusted signing certificate; WiX is heavier than this app needs. The user also wanted to learn Velopack.
+- **Per user only:** the app's settings and autostart are already per user, and no admin prompt is needed.
+- **Download in the background, install on restart:** a tray app shouldn't restart by itself. It's either restarted by the user from the notification or tray menu, or updated on the next start. Installing via `WaitExitThenApplyUpdates` plus a normal exit means a reduced volume is restored before the update.
+- **Single-file publish kept as the package content:** `vpk pack` handles it, and the same exe is the portable download. Tested locally: packing works, and a delta between two builds is about 13 KB instead of 51 MB.
+- **Release created by `gh`, Velopack files added by `vpk upload github --merge`:** keeps the existing tag and notes logic, and lets Velopack write the per-release feed in the form its GitHub source expects.
+- **Portable exe kept:** for people who deliberately don't want an installation. The README steers everyone else to the installer.
+- **Only works with a public repository:** the installed app reads GitHub releases without a token, so update checks fail while the repository is private. They report "couldn't check" when run by hand and stay silent otherwise.
+
+---
+
 ### 2026-11-27 12:30: Experimental "keep the indicator ready" option against HDR black flashes
 
 #### Summary
