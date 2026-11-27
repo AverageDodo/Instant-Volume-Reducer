@@ -46,6 +46,7 @@ internal sealed class SettingsForm : Form
     private readonly Label _hotkeyMessage;
     private readonly CheckBox _startWithWindowsBox;
     private readonly CheckBox _showNotificationsBox;
+    private readonly CheckBox _checkForUpdatesBox;
     private readonly CheckBox _overlayEnabledBox;
     private readonly ComboBox _overlayCornerBox;
     private readonly ComboBox _overlaySizeBox;
@@ -57,7 +58,8 @@ internal sealed class SettingsForm : Form
     /// <param name="audio">Used to list the output devices (initially and on Refresh).</param>
     /// <param name="hotkeys">The app's hotkey manager; OK registers the new hotkey through it.</param>
     /// <param name="icon">The window icon (not owned by the dialog).</param>
-    public SettingsForm(AppSettings settings, IAudioDeviceService audio, HotkeyManager hotkeys, Icon? icon)
+    /// <param name="updatesAvailable">Whether this copy is installed and can update itself.</param>
+    public SettingsForm(AppSettings settings, IAudioDeviceService audio, HotkeyManager hotkeys, Icon? icon, bool updatesAvailable)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _original = settings;
@@ -83,7 +85,7 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = true; // The app has no other window, so let the dialog be found in the taskbar.
-        ClientSize = new Size(680, 680);
+        ClientSize = new Size(680, 700);
         MinimumSize = new Size(560, 600);
         Padding = new Padding(10);
 
@@ -267,6 +269,16 @@ internal sealed class SettingsForm : Form
         optionsLayout.Controls.Add(_startWithWindowsBox);
         optionsLayout.Controls.Add(_showNotificationsBox);
 
+        _checkForUpdatesBox = new CheckBox
+        {
+            Text = updatesAvailable
+                ? "Check for &updates automatically"
+                : "Check for &updates automatically (only in the installed app)",
+            AutoSize = true,
+            Enabled = updatesAvailable,
+        };
+        optionsLayout.Controls.Add(_checkForUpdatesBox);
+
         var optionsGroup = NewAutoSizeGroup("Options", optionsLayout);
 
         // ---- On-screen indicator ----
@@ -379,6 +391,7 @@ internal sealed class SettingsForm : Form
         _hotkeyBox.Binding = HotkeyBinding.TryParse(settings.Hotkey, out var hotkey) ? hotkey : HotkeyBinding.Default;
         _startWithWindowsBox.Checked = settings.StartWithWindows;
         _showNotificationsBox.Checked = settings.ShowNotifications;
+        _checkForUpdatesBox.Checked = settings.CheckForUpdates;
 
         var overlay = settings.Overlay ?? new OverlaySettings();
         _overlayEnabledBox.Checked = overlay.Enabled;
@@ -450,6 +463,7 @@ internal sealed class SettingsForm : Form
             DefaultAmount = DefaultAmount,
             StartWithWindows = _startWithWindowsBox.Checked,
             ShowNotifications = _showNotificationsBox.Checked,
+            CheckForUpdates = _checkForUpdatesBox.Checked,
             Overlay = new OverlaySettings
             {
                 Enabled = _overlayEnabledBox.Checked,

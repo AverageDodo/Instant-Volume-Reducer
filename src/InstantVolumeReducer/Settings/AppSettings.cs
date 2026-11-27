@@ -151,4 +151,10 @@ public sealed class AppSettings
     /// be restored, nothing to reduce, crash recovery) are shown regardless.
     /// </summary>
     public bool ShowNotifications { get; set; }
+
+    /// <summary>
+    /// Whether the installed app checks GitHub for new versions (shortly after start and twice a day) and
+    /// downloads them in the background. On by default; has no effect in a portable copy.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
 }

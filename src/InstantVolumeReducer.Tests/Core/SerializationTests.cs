@@ -45,6 +45,7 @@ public class SerializationTests
         Assert.Empty(settings.Devices);
         Assert.False(settings.StartWithWindows);
         Assert.False(settings.ShowNotifications);
+        Assert.True(settings.CheckForUpdates);
     }
 
     [Fact]
