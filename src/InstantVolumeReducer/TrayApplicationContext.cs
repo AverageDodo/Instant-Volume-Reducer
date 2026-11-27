@@ -28,6 +28,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _toggleItem;
     private readonly Font _boldMenuFont;
     private readonly NotifyIcon _notifyIcon;
+    private readonly ReductionOverlay _overlay;
     private SettingsForm? _settingsForm;
     private bool _shutDown;
 
@@ -95,6 +96,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = _menu,
         };
         _notifyIcon.MouseDoubleClick += OnNotifyIconDoubleClick;
+
+        _overlay = new ReductionOverlay();
 
         _hotkeys = new HotkeyManager();
         _hotkeys.Pressed += (_, _) => ToggleVolume();
@@ -370,6 +373,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _toggleItem.Text = reduced ? "Restore volume" : "Reduce volume";
         _toggleItem.ShortcutKeyDisplayString = _hotkeys.Current?.ToString();
+
+        _overlay.Update(_settings.Overlay, reduced);
     }
 
     private void ShowBalloon(string text, ToolTipIcon icon)
@@ -424,6 +429,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         PersistState();
 
         _hotkeys.Dispose();
+        _overlay.Dispose();
 
         // Hide before disposing so no ghost icon stays in the notification area.
         _notifyIcon.Visible = false;

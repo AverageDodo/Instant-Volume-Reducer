@@ -267,6 +267,54 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal((true, ReductionMode.Absolute, 5), (config.Enabled, config.Mode, config.Amount));
     }
 
+    [Fact]
+    public void Load_FileWithoutOverlay_HasItOffWithDefaults()
+    {
+        WriteRaw("""{ "Hotkey": "Ctrl+Alt+V" }""");
+
+        var overlay = _store.Load().Settings.Overlay;
+
+        Assert.False(overlay.Enabled);
+        Assert.Equal((OverlayCorner.TopRight, OverlaySize.Medium, 85, OverlayMonitor.Primary), (overlay.Corner, overlay.Size, overlay.Opacity, overlay.Monitor));
+    }
+
+    [Fact]
+    public void Load_Overlay_NullOrBadValues_AreFixed()
+    {
+        WriteRaw("""{ "Overlay": null }""");
+        Assert.NotNull(_store.Load().Settings.Overlay);
+
+        WriteRaw("""{ "Overlay": { "Enabled": true, "Corner": 9, "Size": -1, "Opacity": 3, "Monitor": 42 } }""");
+        var overlay = _store.Load().Settings.Overlay;
+        Assert.True(overlay.Enabled);
+        Assert.Equal((OverlayCorner.TopRight, OverlaySize.Medium, OverlaySettings.MinOpacity, OverlayMonitor.Primary), (overlay.Corner, overlay.Size, overlay.Opacity, overlay.Monitor));
+
+        WriteRaw("""{ "Overlay": { "Opacity": 500 } }""");
+        Assert.Equal(OverlaySettings.MaxOpacity, _store.Load().Settings.Overlay.Opacity);
+    }
+
+    [Fact]
+    public void Save_ThenLoad_RoundTripsOverlay_WithEnumsAsText()
+    {
+        _store.Save(new AppSettings
+        {
+            Overlay = new OverlaySettings
+            {
+                Enabled = true,
+                Corner = OverlayCorner.BottomLeft,
+                Size = OverlaySize.Large,
+                Opacity = 60,
+                Monitor = OverlayMonitor.ActiveWindow,
+            },
+        });
+
+        Assert.Contains("\"BottomLeft\"", File.ReadAllText(_store.FilePath));
+        var overlay = _store.Load().Settings.Overlay;
+        Assert.Equal(
+            (true, OverlayCorner.BottomLeft, OverlaySize.Large, 60, OverlayMonitor.ActiveWindow),
+            (overlay.Enabled, overlay.Corner, overlay.Size, overlay.Opacity, overlay.Monitor));
+    }
+
     private void WriteRaw(string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_store.FilePath)!);

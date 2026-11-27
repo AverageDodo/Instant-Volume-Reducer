@@ -18,6 +18,32 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 12:13: On-screen indicator while the volume is reduced
+
+#### Summary
+
+- New optional **on-screen indicator** (`UI\ReductionOverlay.cs`): an orange speaker badge on a dark rounded square, shown in a screen corner while the volume is reduced. It follows every state change, including reductions that move to a new default device.
+- Settings (`AppSettings.Overlay`, off by default; missing in older settings files, which means off): corner, size (32/48/64 px at 100 % scaling), opacity (20–100 %) and display (main monitor or the monitor with the active window). Invalid values in the file fall back to defaults; opacity is clamped.
+- The settings dialog has a new "On-screen indicator" group.
+- `UI\OverlayLayout.cs`: the placement maths (corner inside the working area, margin and size scaled by the monitor's DPI, opacity to alpha), unit-tested.
+- The speaker drawing moved into `TrayIcons.DrawGlyph`, shared by the tray icons and the badge.
+- The app now runs with per-monitor DPI awareness (`ApplicationHighDpiMode` `PerMonitorV2`).
+
+#### Reasoning
+
+- **Per-pixel-alpha layered window (`UpdateLayeredWindow`) on a bare `NativeWindow`:**
+  - It gives smooth, semi-transparent edges, which a `TransparencyKey` form can't.
+  - A `NativeWindow` avoids WinForms resizing or moving the window on DPI changes.
+  - It's click-through (`WS_EX_TRANSPARENT`, `HTTRANSPARENT`) and never takes the focus (`WS_EX_NOACTIVATE`).
+  - `WS_EX_TOOLWINDOW` keeps it out of the taskbar and Alt+Tab.
+- **Re-asserting topmost every 2 seconds while shown:** other topmost windows can cover it. The same timer moves the badge to the active window's monitor in that mode, and display changes re-place it right away. Hidden, it costs nothing.
+- **Working area instead of full monitor bounds:** the badge never covers the taskbar.
+- **Per-monitor DPI awareness:** the badge is sized and placed in physical pixels per monitor. It also keeps the settings dialog sharp on mixed-scaling setups (WinForms rescales it with `AutoScaleMode.Dpi`).
+- **Off by default:** consistent with notifications being off by default; the tray icon already shows the state.
+- **Known limitation, deferred:** exclusive-fullscreen apps draw over all normal windows, so the badge isn't visible there. Working around that would need hooking into the app's rendering.
+
+---
+
 ### 2026-11-20 14:28: CI, automatic releases and versioning
 
 #### Summary
