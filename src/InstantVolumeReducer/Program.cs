@@ -1,3 +1,6 @@
+using InstantVolumeReducer.Updates;
+using Velopack;
+
 namespace InstantVolumeReducer;
 
 internal static class Program
@@ -11,9 +14,12 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        // Must come first: during install, update and uninstall, Velopack starts the exe to run a hook, and
-        // the process exits in here. It also applies a downloaded update on a normal start.
-        Updates.InstallHooks.Run();
+        // Must come first, directly in Main (vpk pack checks for it here): during install, update and
+        // uninstall, Velopack starts the exe to run a hook, and the process exits in Run(). It also applies
+        // a downloaded update on a normal start.
+        VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => InstallHooks.BeforeUninstall())
+            .Run();
 
         using var mutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
         if (!createdNew)

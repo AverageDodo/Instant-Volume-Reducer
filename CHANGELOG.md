@@ -18,6 +18,28 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 13:27: Release workflow fix for immutable releases
+
+#### Summary
+
+- **The problem:** the first release with the installer (`v0.2.0`) failed. The repository has GitHub's immutable releases turned on, so assets can't be added to a published release. The workflow published the release with `gh release create` first and then tried to add the Velopack files with `vpk upload github --merge`, which GitHub rejected ("Cannot upload assets to an immutable release"). The incomplete `v0.2.0` release and its tag were deleted by hand.
+- **The new release steps:**
+  1. Remove a draft left by an earlier failed run.
+  2. `vpk upload github` without `--publish` creates a **draft** release with the setup, update packages and feed.
+  3. `gh release upload` adds the portable exe and the checksums.
+  4. The notes are generated through the API (`releases/generate-notes`), and `gh release edit --draft=false` publishes the release, which creates the tag on the merge commit.
+  5. On failure, a final step explains that at most a draft exists.
+- **`VelopackApp.Build()…Run()` moved directly into `Program.Main`:** `vpk pack` warned that it couldn't find it in the entry point. `InstallHooks` now only holds the uninstall work.
+- README: the release description now covers the draft-then-publish flow and immutable releases.
+
+#### Reasoning
+
+- **Draft first, publish last:** with immutable releases, a release must be complete when it's published. Drafts can still be changed, and a draft has no tag yet. So a failed run leaves nothing that blocks a re-run, and installed copies never see a half-finished release.
+- **Velopack still creates the release:** `vpk upload github` writes the per-release `releases.win.json` in the form its GitHub update source expects. Rebuilding that by hand would duplicate Velopack's logic.
+- **Keeping immutable releases on:** it guarantees that published installers and update packages can't be swapped out later, which matters for an app that updates itself.
+
+---
+
 ### 2026-11-27 12:52: Installer and automatic updates with Velopack
 
 #### Summary

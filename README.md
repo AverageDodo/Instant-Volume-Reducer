@@ -152,10 +152,11 @@ Work flows `feature branch → develop → main`, always through pull requests:
 4. Merge it with **Create a merge commit**. Squash or rebase merges make `main` and `develop` drift apart, which causes conflicts in later pull requests.
 5. The **Release** workflow (`.github/workflows/release.yml`) runs on the push to `main`:
    - It builds and tests the app, publishes the exe, and builds the Velopack installer and update packages. If the previous release has update packages, it also builds a small delta package, so installed copies only download what changed.
-   - Then it creates the tag `v<Version>` on the merge commit and a GitHub release with notes generated from the merged pull requests. The release contains:
+   - Then it assembles a **draft** release and publishes it, with notes generated from the merged pull requests. Publishing creates the tag `v<Version>` on the merge commit. The release contains:
      - the installer, the portable exe, and a `.sha256` file for each
      - the update packages and the `releases.win.json` feed that installed copies read
-   - If the final upload of the installer fails, the release exists without it. Delete the release and its tag, then re-run the workflow.
+   - The repository has GitHub's **immutable releases** turned on, so a published release can't be changed. That's why nothing is published until every file is attached.
+   - If the run fails, at most a draft release exists and no tag. Re-running the workflow removes the draft and starts over.
    - If `v<Version>` already exists, nothing is released.
    - Versions with a pre-release part are published as pre-releases.
 
