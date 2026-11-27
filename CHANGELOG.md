@@ -18,6 +18,21 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 13:41: Version 0.2.1; 0.2.0 can't be released
+
+#### Summary
+
+- `<Version>` raised to `0.2.1`. The `<AssemblyVersion>` and `<FileVersion>` entries were removed, so the SDK derives both from `<Version>` again and there's only one number to change.
+- The second `v0.2.0` release run assembled the draft with all files, but publishing failed: "tag_name was used by an immutable release" / "Cannot create ref due to creations being restricted". The unpublishable `v0.2.0` draft was deleted.
+- README and the project file note that a published version must never be reused.
+
+#### Reasoning
+
+- **Why 0.2.0 is gone:** with immutable releases turned on, GitHub permanently reserves the tag name of a published release, even after the release and its tag are deleted. The first, incomplete `v0.2.0` release had been published, so `v0.2.0` can't be created again. The next free version is `0.2.1`.
+- **Documentation instead of an automatic check:** GitHub's API doesn't list deleted releases or reserved tag names, so the release check can't warn about a reserved version beforehand.
+
+---
+
 ### 2026-11-27 13:27: Release workflow fix for immutable releases
 
 #### Summary
