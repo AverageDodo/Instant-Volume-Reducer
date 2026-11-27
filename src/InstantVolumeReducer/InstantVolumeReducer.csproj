@@ -7,6 +7,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+    <!-- Per-monitor DPI awareness: the overlay is placed and sized in physical pixels on each monitor, and
+         the settings dialog stays sharp when moved between monitors with different scaling. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <PropertyGroup>

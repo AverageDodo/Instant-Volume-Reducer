@@ -13,6 +13,7 @@ A small Windows tray app that turns down selected audio output devices when you 
 - **Tray icon:** blue when the volume is normal and orange when it's reduced, with a tooltip saying how many devices are reduced.
 - **Safe restore:** volumes are restored on exit and Windows sign-out, and after a crash (see [Files and crash recovery](#files-and-crash-recovery)).
 - Optional **Start with Windows** and **notifications** on each toggle.
+- Optional **on-screen indicator:** a small orange speaker badge in a corner of the screen while the volume is reduced.
 
 ## Download
 
@@ -55,6 +56,13 @@ On first start, every connected output device is selected with the defaults: Rel
   - Backspace or Delete returns to the hotkey the box started with.
   - If another app already uses the combination, the dialog says so and the old hotkey stays active.
 - **Start with Windows** and **Show a notification when the volume is reduced or restored** (both off by default). Warnings, such as a device that couldn't be restored, are always shown.
+- **On-screen indicator** (off by default): **Show an icon on screen while the volume is reduced**.
+  - Choose the corner, the size (small, medium, large), the opacity (20–100 %) and the display: the main monitor, or the monitor with the active window. With the active window, the badge follows it within about 2 seconds.
+  - Clicks go through the badge, it never takes the focus, and it isn't listed in the taskbar or Alt+Tab.
+  - It stays inside the monitor's working area, so it doesn't cover the taskbar, and it scales with each monitor's display scaling.
+  - **Keep the indicator ready to avoid black flashes in HDR games (experimental):** a window appearing over a fullscreen game makes Windows switch from sending the game's frames straight to the monitor to composing the desktop. On some HDR monitors, that switch causes a short black screen.
+    - With this option, the indicator window stays on screen, practically invisible, whenever the indicator is on, and only becomes visible while the volume is reduced, so toggling doesn't trigger the switch.
+    - Trade-off: a game under the indicator's corner is always composed by Windows. That can add about one frame of delay and, on some setups, turn off variable refresh rate in windowed mode.
 
 Changes take effect when you click **OK**. Changing a device's mode or amount while the volume is reduced applies from the next reduction. Unticking a device while it's reduced restores it right away.
 
@@ -116,6 +124,7 @@ On a private repository on GitHub's Free plan, branch protection isn't available
 ## Known limitations
 
 - **Output devices only:** the app changes each device's master volume. It doesn't control per-app volumes or microphones.
+- **Overlay and exclusive fullscreen:** apps that run in exclusive fullscreen (some games) draw over every normal window, so the on-screen indicator isn't visible there. Windowed and borderless-fullscreen apps are fine.
 - **Hotkey conflicts:** a global hotkey only works if no other app has registered the same combination. Pick another one in Settings if it's taken.
 - **Manual changes while reduced are overwritten:** restoring always returns to the volume saved when reducing, even if you changed the volume by hand in between.
 - **Unplugged devices:** a device that is unplugged while reduced isn't restored, and its saved original volume is discarded.

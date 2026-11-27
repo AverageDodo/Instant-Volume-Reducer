@@ -54,6 +54,66 @@ public sealed class WindowsDefaultDeviceConfig
     public int Amount { get; set; } = AppSettings.DefaultReductionAmount;
 }
 
+/// <summary>The screen corner the overlay icon is shown in.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<OverlayCorner>))]
+public enum OverlayCorner
+{
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// <summary>The overlay icon's size; the pixel size also depends on the monitor's scaling.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<OverlaySize>))]
+public enum OverlaySize
+{
+    Small,
+    Medium,
+    Large,
+}
+
+/// <summary>Which monitor the overlay icon is shown on.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<OverlayMonitor>))]
+public enum OverlayMonitor
+{
+    /// <summary>The main (primary) monitor.</summary>
+    Primary,
+
+    /// <summary>The monitor that shows the active (foreground) window; follows it as it moves.</summary>
+    ActiveWindow,
+}
+
+/// <summary>
+/// The on-screen indicator: a small icon shown in a corner of the screen while the volume is reduced.
+/// </summary>
+public sealed class OverlaySettings
+{
+    public const int MinOpacity = 20;
+    public const int MaxOpacity = 100;
+
+    /// <summary>Whether the icon is shown while the volume is reduced. Off by default.</summary>
+    public bool Enabled { get; set; }
+
+    public OverlayCorner Corner { get; set; } = OverlayCorner.TopRight;
+
+    public OverlaySize Size { get; set; } = OverlaySize.Medium;
+
+    /// <summary>The icon's opacity in percent (<see cref="MinOpacity"/>–<see cref="MaxOpacity"/>).</summary>
+    public int Opacity { get; set; } = 85;
+
+    public OverlayMonitor Monitor { get; set; } = OverlayMonitor.Primary;
+
+    /// <summary>
+    /// Experimental: keep the indicator window on screen (practically invisible) whenever the overlay is
+    /// enabled, and only make it visible while the volume is reduced. A window appearing over a fullscreen
+    /// game makes Windows switch from sending the game's frames straight to the monitor to composing the
+    /// desktop, which causes a short black screen on some HDR setups; a window that is always there avoids
+    /// that switch on toggle. Off by default.
+    /// </summary>
+    public bool KeepWindowReady { get; set; }
+}
+
 /// <summary>
 /// All user settings. Serialized as JSON to <c>%APPDATA%\InstantVolumeReducer\settings.json</c>.
 /// </summary>
@@ -74,6 +134,9 @@ public sealed class AppSettings
     /// own settings there instead. Missing in settings files from before this option, which means off.
     /// </summary>
     public WindowsDefaultDeviceConfig WindowsDefaultDevice { get; set; } = new();
+
+    /// <summary>The on-screen indicator. Missing in settings files from before this option, which means off.</summary>
+    public OverlaySettings Overlay { get; set; } = new();
 
     /// <summary>The mode a device gets when it is selected for the first time.</summary>
     public ReductionMode DefaultMode { get; set; } = DefaultReductionMode;
