@@ -2,7 +2,7 @@
 
 ## General
 
-- Never include any co-authoring attribution in commit messages
+- Never include any co-authoring attribution anywhere (comments, commit messages, PRs and so on)
 - Never push without explicit approval
 - All major changes, additions and decisions in the project must be noted in `.\CHANGELOG.md`
 

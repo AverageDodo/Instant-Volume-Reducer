@@ -18,6 +18,86 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 12:52: Installer and automatic updates with Velopack
+
+#### Summary
+
+- **Velopack** (NuGet `Velopack` 1.2.161, packaging tool `vpk` 1.2.161 as a local tool in `dotnet-tools.json`) provides the installer and in-app updates.
+  - `InstantVolumeReducer-win-Setup.exe` installs per user without admin rights to `%LocalAppData%\InstantVolumeReducer`, with a Start menu shortcut (no desktop shortcut) and an entry in Settings → Apps.
+- **Startup:** `Program.Main` first runs `Updates\InstallHooks.Run()` (`VelopackApp.Build()…Run()`), which also applies a downloaded update on start.
+- **Uninstall hook:** restores a still-reduced volume from `state.json` and removes the "Start with Windows" entry. Settings in `%APPDATA%` are kept.
+- **Updates** (`Updates\UpdateCoordinator`, `Updates\VelopackUpdateClient`):
+  - The installed app checks the repository's GitHub releases 1 minute after start and then every 12 hours, and downloads a new version in the background.
+  - A notification and the tray item "Restart to install version …" install it; otherwise it's installed on the next start.
+  - The tray also has "Check for updates…".
+  - New setting `CheckForUpdates` (on by default) in the settings dialog.
+  - Pre-releases are only offered to copies that run a pre-release.
+  - `INSTANTVOLUMEREDUCER_UPDATE_SOURCE` points the app at a local folder for testing.
+- **Release workflow:**
+  - After publishing, it restores `vpk`, downloads the previous release's package (for a delta package) and runs `vpk pack`.
+  - `gh release create` creates the tag and the release with the portable exe and `.sha256` files for the exe and the setup.
+  - `vpk upload github --merge` then adds the setup, the update packages and the `releases.win.json` feed to the same release.
+- **README:** the Download section now recommends the installer and explains what the portable exe means (no updates, its location matters, no uninstaller). New sections for uninstalling and for building the installer.
+- `.gitignore`: local `velopack/` and `Releases/` output.
+
+#### Reasoning
+
+- **Velopack over Inno Setup, WiX and MSIX:** it combines a per-user installer with delta updates from GitHub Releases. That matters for a tray app that runs all day, whose users rarely download new versions themselves. MSIX needs a trusted signing certificate; WiX is heavier than this app needs. The user also wanted to learn Velopack.
+- **Per user only:** the app's settings and autostart are already per user, and no admin prompt is needed.
+- **Download in the background, install on restart:** a tray app shouldn't restart by itself. It's either restarted by the user from the notification or tray menu, or updated on the next start. Installing via `WaitExitThenApplyUpdates` plus a normal exit means a reduced volume is restored before the update.
+- **Single-file publish kept as the package content:** `vpk pack` handles it, and the same exe is the portable download. Tested locally: packing works, and a delta between two builds is about 13 KB instead of 51 MB.
+- **Release created by `gh`, Velopack files added by `vpk upload github --merge`:** keeps the existing tag and notes logic, and lets Velopack write the per-release feed in the form its GitHub source expects.
+- **Portable exe kept:** for people who deliberately don't want an installation. The README steers everyone else to the installer.
+- **Only works with a public repository:** the installed app reads GitHub releases without a token, so update checks fail while the repository is private. They report "couldn't check" when run by hand and stay silent otherwise.
+
+---
+
+### 2026-11-27 12:30: Experimental "keep the indicator ready" option against HDR black flashes
+
+#### Summary
+
+- New setting `OverlaySettings.KeepWindowReady`, off by default; missing in older settings files, which means off. In the settings dialog it's "Keep the indicator ready to avoid black flashes in HDR games (experimental)", with a tooltip explaining the trade-off.
+- When on, the overlay window stays shown whenever the indicator is enabled.
+  - It's drawn with alpha 1/255 (`OverlayLayout.IdleAlpha`) while the volume isn't reduced, and with the opacity setting while it is.
+  - Toggling only changes the alpha (`UpdateLayeredWindow`), never shows or hides the window.
+  - The topmost and active-monitor timer keeps running, so the window is already on the right monitor when it becomes visible.
+
+#### Reasoning
+
+- **The problem:** showing a new window over a fullscreen game makes Windows switch from sending the game's frames straight to the monitor to composing the desktop. On some HDR monitors, that switch causes a short black screen. Alt-Tab and system pop-ups cause the same switch.
+- **A window that's always present** means the switch doesn't happen on toggle.
+- **Alpha 1 instead of 0:** a fully transparent window may be treated as absent, which would bring the switch back when it becomes visible. 1/255 is invisible to the eye.
+- **Experimental and off by default:** whether it removes the flash depends on the GPU, driver and monitor, and it has to be confirmed on real HDR setups. The trade-off is that a game under the indicator is always composed: possibly about one frame of extra delay, and on some setups no variable refresh rate in windowed mode.
+- **Fallback if it doesn't help:** an option not to show the indicator over fullscreen apps.
+
+---
+
+### 2026-11-27 12:13: On-screen indicator while the volume is reduced
+
+#### Summary
+
+- New optional **on-screen indicator** (`UI\ReductionOverlay.cs`): an orange speaker badge on a dark rounded square, shown in a screen corner while the volume is reduced. It follows every state change, including reductions that move to a new default device.
+- Settings (`AppSettings.Overlay`, off by default; missing in older settings files, which means off): corner, size (32/48/64 px at 100 % scaling), opacity (20–100 %) and display (main monitor or the monitor with the active window). Invalid values in the file fall back to defaults; opacity is clamped.
+- The settings dialog has a new "On-screen indicator" group.
+- `UI\OverlayLayout.cs`: the placement maths (corner inside the working area, margin and size scaled by the monitor's DPI, opacity to alpha), unit-tested.
+- The speaker drawing moved into `TrayIcons.DrawGlyph`, shared by the tray icons and the badge.
+- The app now runs with per-monitor DPI awareness (`ApplicationHighDpiMode` `PerMonitorV2`).
+
+#### Reasoning
+
+- **Per-pixel-alpha layered window (`UpdateLayeredWindow`) on a bare `NativeWindow`:**
+  - It gives smooth, semi-transparent edges, which a `TransparencyKey` form can't.
+  - A `NativeWindow` avoids WinForms resizing or moving the window on DPI changes.
+  - It's click-through (`WS_EX_TRANSPARENT`, `HTTRANSPARENT`) and never takes the focus (`WS_EX_NOACTIVATE`).
+  - `WS_EX_TOOLWINDOW` keeps it out of the taskbar and Alt+Tab.
+- **Re-asserting topmost every 2 seconds while shown:** other topmost windows can cover it. The same timer moves the badge to the active window's monitor in that mode, and display changes re-place it right away. Hidden, it costs nothing.
+- **Working area instead of full monitor bounds:** the badge never covers the taskbar.
+- **Per-monitor DPI awareness:** the badge is sized and placed in physical pixels per monitor. It also keeps the settings dialog sharp on mixed-scaling setups (WinForms rescales it with `AutoScaleMode.Dpi`).
+- **Off by default:** consistent with notifications being off by default; the tray icon already shows the state.
+- **Known limitation, deferred:** exclusive-fullscreen apps draw over all normal windows, so the badge isn't visible there. Working around that would need hooking into the app's rendering.
+
+---
+
 ### 2026-11-20 14:28: CI, automatic releases and versioning
 
 #### Summary

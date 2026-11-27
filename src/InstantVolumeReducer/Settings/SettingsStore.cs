@@ -99,7 +99,8 @@ public sealed class SettingsStore
     /// Makes loaded settings safe to use, since the file may have been edited by hand: a missing or invalid
     /// hotkey becomes the default (and a valid one is written in its standard form), amounts are clamped
     /// to 0–100, unknown modes become the default mode, and device entries without an ID, or repeating
-    /// an earlier entry's ID, are dropped.
+    /// an earlier entry's ID, are dropped. Missing sections get their defaults, unknown overlay choices
+    /// their default value, and the overlay opacity is clamped.
     /// </summary>
     public static AppSettings Normalize(AppSettings settings)
     {
@@ -131,6 +132,13 @@ public sealed class SettingsStore
         settings.WindowsDefaultDevice ??= new WindowsDefaultDeviceConfig();
         settings.WindowsDefaultDevice.Mode = NormalizeMode(settings.WindowsDefaultDevice.Mode);
         settings.WindowsDefaultDevice.Amount = ClampAmount(settings.WindowsDefaultDevice.Amount);
+
+        var overlay = settings.Overlay ??= new OverlaySettings();
+        var overlayDefaults = new OverlaySettings();
+        overlay.Corner = Enum.IsDefined(overlay.Corner) ? overlay.Corner : overlayDefaults.Corner;
+        overlay.Size = Enum.IsDefined(overlay.Size) ? overlay.Size : overlayDefaults.Size;
+        overlay.Monitor = Enum.IsDefined(overlay.Monitor) ? overlay.Monitor : overlayDefaults.Monitor;
+        overlay.Opacity = Math.Clamp(overlay.Opacity, OverlaySettings.MinOpacity, OverlaySettings.MaxOpacity);
         return settings;
     }
 

@@ -354,3 +354,6 @@ Temporary Items
 # Exceptions to the exclusions
 !src/Microsoft.DotNet.Wpf/src/WpfGfx/codegen/mcg/main/*.rsp
 !src/Microsoft.DotNet.Wpf/src/WpfGfx/tools/csp/**/*.rsp
+# Velopack output from local `vpk pack` / `vpk download` runs
+velopack/
+Releases/

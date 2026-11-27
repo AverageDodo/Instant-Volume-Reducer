@@ -43,21 +43,8 @@ internal sealed class TrayIcons : IDisposable
         using var bitmap = new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             graphics.Clear(Color.Transparent);
-            graphics.ScaleTransform(size.Width / DesignSize, size.Height / DesignSize);
-
-            var color = reduced ? ReducedColor : NormalColor;
-            DrawSpeaker(graphics, color);
-            if (reduced)
-            {
-                DrawDownArrow(graphics, color);
-            }
-            else
-            {
-                DrawSoundWaves(graphics, color);
-            }
+            DrawGlyph(graphics, new RectangleF(0, 0, size.Width, size.Height), reduced);
         }
 
         // GetHicon creates an unmanaged icon that Icon.FromHandle doesn't take ownership of. Clone it into
@@ -71,6 +58,37 @@ internal sealed class TrayIcons : IDisposable
         finally
         {
             DestroyIcon(handle);
+        }
+    }
+
+    /// <summary>
+    /// Draws the normal or reduced speaker into <paramref name="bounds"/>, anti-aliased. Shared with the
+    /// on-screen overlay so both look the same. Leaves the graphics state as it found it.
+    /// </summary>
+    internal static void DrawGlyph(Graphics graphics, RectangleF bounds, bool reduced)
+    {
+        var state = graphics.Save();
+        try
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.TranslateTransform(bounds.X, bounds.Y);
+            graphics.ScaleTransform(bounds.Width / DesignSize, bounds.Height / DesignSize);
+
+            var color = reduced ? ReducedColor : NormalColor;
+            DrawSpeaker(graphics, color);
+            if (reduced)
+            {
+                DrawDownArrow(graphics, color);
+            }
+            else
+            {
+                DrawSoundWaves(graphics, color);
+            }
+        }
+        finally
+        {
+            graphics.Restore(state);
         }
     }
 

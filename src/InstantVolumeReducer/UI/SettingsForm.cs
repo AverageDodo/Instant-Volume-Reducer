@@ -46,12 +46,20 @@ internal sealed class SettingsForm : Form
     private readonly Label _hotkeyMessage;
     private readonly CheckBox _startWithWindowsBox;
     private readonly CheckBox _showNotificationsBox;
+    private readonly CheckBox _checkForUpdatesBox;
+    private readonly CheckBox _overlayEnabledBox;
+    private readonly ComboBox _overlayCornerBox;
+    private readonly ComboBox _overlaySizeBox;
+    private readonly NumericUpDown _overlayOpacityBox;
+    private readonly ComboBox _overlayMonitorBox;
+    private readonly CheckBox _overlayKeepReadyBox;
 
     /// <param name="settings">The current settings; the dialog doesn't modify this object.</param>
     /// <param name="audio">Used to list the output devices (initially and on Refresh).</param>
     /// <param name="hotkeys">The app's hotkey manager; OK registers the new hotkey through it.</param>
     /// <param name="icon">The window icon (not owned by the dialog).</param>
-    public SettingsForm(AppSettings settings, IAudioDeviceService audio, HotkeyManager hotkeys, Icon? icon)
+    /// <param name="updatesAvailable">Whether this copy is installed and can update itself.</param>
+    public SettingsForm(AppSettings settings, IAudioDeviceService audio, HotkeyManager hotkeys, Icon? icon, bool updatesAvailable)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _original = settings;
@@ -77,8 +85,8 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = true; // The app has no other window, so let the dialog be found in the taskbar.
-        ClientSize = new Size(680, 560);
-        MinimumSize = new Size(560, 480);
+        ClientSize = new Size(680, 700);
+        MinimumSize = new Size(560, 600);
         Padding = new Padding(10);
 
         // ---- Devices ----
@@ -261,7 +269,80 @@ internal sealed class SettingsForm : Form
         optionsLayout.Controls.Add(_startWithWindowsBox);
         optionsLayout.Controls.Add(_showNotificationsBox);
 
+        _checkForUpdatesBox = new CheckBox
+        {
+            Text = updatesAvailable
+                ? "Check for &updates automatically"
+                : "Check for &updates automatically (only in the installed app)",
+            AutoSize = true,
+            Enabled = updatesAvailable,
+        };
+        optionsLayout.Controls.Add(_checkForUpdatesBox);
+
         var optionsGroup = NewAutoSizeGroup("Options", optionsLayout);
+
+        // ---- On-screen indicator ----
+        _overlayEnabledBox = new CheckBox { Text = "Show an &icon on screen while the volume is reduced", AutoSize = true };
+        _overlayCornerBox = NewChoiceBox(
+            "Overlay corner",
+            new Choice<OverlayCorner>(OverlayCorner.TopLeft, "Top left"),
+            new Choice<OverlayCorner>(OverlayCorner.TopRight, "Top right"),
+            new Choice<OverlayCorner>(OverlayCorner.BottomLeft, "Bottom left"),
+            new Choice<OverlayCorner>(OverlayCorner.BottomRight, "Bottom right"));
+        _overlaySizeBox = NewChoiceBox(
+            "Overlay size",
+            new Choice<OverlaySize>(OverlaySize.Small, "Small"),
+            new Choice<OverlaySize>(OverlaySize.Medium, "Medium"),
+            new Choice<OverlaySize>(OverlaySize.Large, "Large"));
+        _overlayMonitorBox = NewChoiceBox(
+            "Overlay monitor",
+            new Choice<OverlayMonitor>(OverlayMonitor.Primary, "Main monitor"),
+            new Choice<OverlayMonitor>(OverlayMonitor.ActiveWindow, "Monitor with the active window"));
+        _overlayMonitorBox.Width = 220;
+        _overlayOpacityBox = new NumericUpDown
+        {
+            Minimum = OverlaySettings.MinOpacity,
+            Maximum = OverlaySettings.MaxOpacity,
+            Increment = 5,
+            Anchor = AnchorStyles.Left,
+            Width = 70,
+            TextAlign = HorizontalAlignment.Right,
+            AccessibleName = "Overlay opacity in percent",
+        };
+        _overlayKeepReadyBox = new CheckBox
+        {
+            Text = "&Keep the indicator ready to avoid black flashes in HDR games (experimental)",
+            AutoSize = true,
+            Margin = new Padding(3, 6, 3, 3),
+        };
+        _overlayEnabledBox.CheckedChanged += (_, _) => UpdateOverlayControls();
+
+        var overlayLayout = NewFormLayout(columns: 5);
+        overlayLayout.Controls.Add(_overlayEnabledBox, 0, 0);
+        overlayLayout.SetColumnSpan(_overlayEnabledBox, 5);
+        overlayLayout.Controls.Add(NewLabel("&Corner:"), 0, 1);
+        overlayLayout.Controls.Add(_overlayCornerBox, 1, 1);
+        overlayLayout.Controls.Add(NewLabel("Si&ze:"), 2, 1);
+        overlayLayout.Controls.Add(_overlaySizeBox, 3, 1);
+        overlayLayout.Controls.Add(NewLabel("&Opacity:"), 0, 2);
+        overlayLayout.Controls.Add(_overlayOpacityBox, 1, 2);
+        overlayLayout.Controls.Add(NewLabel("Displa&y:"), 2, 2);
+        overlayLayout.Controls.Add(_overlayMonitorBox, 3, 2);
+        overlayLayout.SetColumnSpan(_overlayMonitorBox, 2);
+        overlayLayout.Controls.Add(_overlayKeepReadyBox, 0, 3);
+        overlayLayout.SetColumnSpan(_overlayKeepReadyBox, 5);
+
+        var overlayGroup = NewAutoSizeGroup("On-screen indicator", overlayLayout);
+
+        var overlayToolTip = new ToolTip { AutoPopDelay = 20000 };
+        FormClosed += (_, _) => overlayToolTip.Dispose();
+        overlayToolTip.SetToolTip(
+            _overlayKeepReadyBox,
+            "Keeps the indicator window on screen, practically invisible, whenever the indicator is on, and only\n" +
+            "makes it visible while the volume is reduced. Showing a new window over a fullscreen game can cause\n" +
+            "a short black screen on some HDR monitors; a window that's always there avoids that on toggle.\n" +
+            "Trade-off: games under the indicator's corner are always composed by Windows, which can add about\n" +
+            "one frame of delay and, on some setups, turn off variable refresh rate in windowed mode.");
 
         // ---- Buttons ----
         var okButton = new Button { Text = "OK", AutoSize = true, MinimumSize = new Size(80, 0) };
@@ -283,10 +364,10 @@ internal sealed class SettingsForm : Form
         buttons.Controls.Add(okButton);
 
         // ---- Root ----
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < 5; i++)
         {
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
@@ -295,7 +376,8 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(defaultsGroup, 0, 1);
         root.Controls.Add(hotkeyGroup, 0, 2);
         root.Controls.Add(optionsGroup, 0, 3);
-        root.Controls.Add(buttons, 0, 4);
+        root.Controls.Add(overlayGroup, 0, 4);
+        root.Controls.Add(buttons, 0, 5);
         Controls.Add(root);
 
         ResumeLayout(performLayout: true);
@@ -309,6 +391,16 @@ internal sealed class SettingsForm : Form
         _hotkeyBox.Binding = HotkeyBinding.TryParse(settings.Hotkey, out var hotkey) ? hotkey : HotkeyBinding.Default;
         _startWithWindowsBox.Checked = settings.StartWithWindows;
         _showNotificationsBox.Checked = settings.ShowNotifications;
+        _checkForUpdatesBox.Checked = settings.CheckForUpdates;
+
+        var overlay = settings.Overlay ?? new OverlaySettings();
+        _overlayEnabledBox.Checked = overlay.Enabled;
+        _overlayCornerBox.SelectedValue = overlay.Corner;
+        _overlaySizeBox.SelectedValue = overlay.Size;
+        _overlayMonitorBox.SelectedValue = overlay.Monitor;
+        _overlayOpacityBox.Value = Math.Clamp(overlay.Opacity, OverlaySettings.MinOpacity, OverlaySettings.MaxOpacity);
+        _overlayKeepReadyBox.Checked = overlay.KeepWindowReady;
+        UpdateOverlayControls();
 
         PopulateGrid();
 
@@ -371,6 +463,16 @@ internal sealed class SettingsForm : Form
             DefaultAmount = DefaultAmount,
             StartWithWindows = _startWithWindowsBox.Checked,
             ShowNotifications = _showNotificationsBox.Checked,
+            CheckForUpdates = _checkForUpdatesBox.Checked,
+            Overlay = new OverlaySettings
+            {
+                Enabled = _overlayEnabledBox.Checked,
+                Corner = SelectedOr(_overlayCornerBox, _original.Overlay?.Corner ?? OverlayCorner.TopRight),
+                Size = SelectedOr(_overlaySizeBox, _original.Overlay?.Size ?? OverlaySize.Medium),
+                Monitor = SelectedOr(_overlayMonitorBox, _original.Overlay?.Monitor ?? OverlayMonitor.Primary),
+                Opacity = (int)_overlayOpacityBox.Value,
+                KeepWindowReady = _overlayKeepReadyBox.Checked,
+            },
         };
         DialogResult = DialogResult.OK;
         Close();
@@ -624,7 +726,35 @@ internal sealed class SettingsForm : Form
             && amount is >= DeviceReductionConfig.MinAmount and <= DeviceReductionConfig.MaxAmount;
     }
 
+    // ---- On-screen indicator ----
+
+    private void UpdateOverlayControls()
+    {
+        var enabled = _overlayEnabledBox.Checked;
+        _overlayCornerBox.Enabled = enabled;
+        _overlaySizeBox.Enabled = enabled;
+        _overlayOpacityBox.Enabled = enabled;
+        _overlayMonitorBox.Enabled = enabled;
+        _overlayKeepReadyBox.Enabled = enabled;
+    }
+
+    private static T SelectedOr<T>(ComboBox box, T fallback)
+        where T : struct, Enum =>
+        box.SelectedValue is T value ? value : fallback;
+
     // ---- Layout helpers ----
+
+    private static ComboBox NewChoiceBox<T>(string accessibleName, params Choice<T>[] choices)
+        where T : struct, Enum => new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        DataSource = choices.ToList(),
+        DisplayMember = nameof(Choice<T>.Name),
+        ValueMember = nameof(Choice<T>.Value),
+        Anchor = AnchorStyles.Left,
+        Width = 130,
+        AccessibleName = accessibleName,
+    };
 
     private static TableLayoutPanel NewFormLayout(int columns)
     {
@@ -666,4 +796,7 @@ internal sealed class SettingsForm : Form
     }
 
     private sealed record ModeItem(ReductionMode Mode, string Name);
+
+    private sealed record Choice<T>(T Value, string Name)
+        where T : struct, Enum;
 }
