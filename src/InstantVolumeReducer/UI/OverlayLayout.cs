@@ -49,6 +49,16 @@ public static class OverlayLayout
         return new Rectangle(Math.Max(x, workingArea.Left), Math.Max(y, workingArea.Top), edge, edge);
     }
 
+    /// <summary>
+    /// The window alpha while the overlay is kept ready but the volume isn't reduced. 1 of 255 is
+    /// invisible to the eye, but unlike 0 the window still counts as visible content, so Windows keeps
+    /// composing it with whatever is underneath and nothing changes when it becomes visible.
+    /// </summary>
+    public const byte IdleAlpha = 1;
+
+    /// <summary>The window alpha for the current state: the opacity setting while reduced, otherwise <see cref="IdleAlpha"/>.</summary>
+    public static byte WindowAlpha(bool reduced, int opacityPercent) => reduced ? Alpha(opacityPercent) : IdleAlpha;
+
     /// <summary>Converts the opacity setting (percent) to a window alpha value (0–255).</summary>
     public static byte Alpha(int opacityPercent)
     {

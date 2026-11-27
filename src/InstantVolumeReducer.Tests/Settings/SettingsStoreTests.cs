@@ -275,6 +275,7 @@ public sealed class SettingsStoreTests : IDisposable
         var overlay = _store.Load().Settings.Overlay;
 
         Assert.False(overlay.Enabled);
+        Assert.False(overlay.KeepWindowReady);
         Assert.Equal((OverlayCorner.TopRight, OverlaySize.Medium, 85, OverlayMonitor.Primary), (overlay.Corner, overlay.Size, overlay.Opacity, overlay.Monitor));
     }
 
@@ -305,6 +306,7 @@ public sealed class SettingsStoreTests : IDisposable
                 Size = OverlaySize.Large,
                 Opacity = 60,
                 Monitor = OverlayMonitor.ActiveWindow,
+                KeepWindowReady = true,
             },
         });
 
@@ -313,6 +315,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(
             (true, OverlayCorner.BottomLeft, OverlaySize.Large, 60, OverlayMonitor.ActiveWindow),
             (overlay.Enabled, overlay.Corner, overlay.Size, overlay.Opacity, overlay.Monitor));
+        Assert.True(overlay.KeepWindowReady);
     }
 
     private void WriteRaw(string content)

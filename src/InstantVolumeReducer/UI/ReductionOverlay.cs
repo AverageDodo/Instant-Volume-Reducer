@@ -30,6 +30,7 @@ internal sealed class ReductionOverlay : IDisposable
     private OverlaySize _size;
     private OverlayMonitor _monitor;
     private int _opacity;
+    private bool _reduced;
     private bool _visible;
     private Rectangle _renderedBounds;
     private byte _renderedAlpha;
@@ -43,8 +44,10 @@ internal sealed class ReductionOverlay : IDisposable
     }
 
     /// <summary>
-    /// Shows the badge if the overlay is enabled and the volume is reduced, otherwise hides it. Picks up
-    /// changed settings right away.
+    /// Shows the badge if the overlay is enabled and the volume is reduced, otherwise hides it. With
+    /// <see cref="OverlaySettings.KeepWindowReady"/>, the window stays on screen whenever the overlay is
+    /// enabled and only its alpha changes between practically invisible and visible. Picks up changed
+    /// settings right away.
     /// </summary>
     public void Update(OverlaySettings settings, bool reduced)
     {
@@ -55,8 +58,9 @@ internal sealed class ReductionOverlay : IDisposable
         _size = settings.Size;
         _monitor = settings.Monitor;
         _opacity = settings.Opacity;
+        _reduced = reduced;
 
-        if (!(settings.Enabled && reduced))
+        if (!(settings.Enabled && (reduced || settings.KeepWindowReady)))
         {
             Hide();
             return;
@@ -119,7 +123,7 @@ internal sealed class ReductionOverlay : IDisposable
         }
 
         var bounds = OverlayLayout.Place(screen.WorkingArea, _corner, _size, GetDpi(screen));
-        var alpha = OverlayLayout.Alpha(_opacity);
+        var alpha = OverlayLayout.WindowAlpha(_reduced, _opacity);
         if (forceRender || bounds != _renderedBounds || alpha != _renderedAlpha)
         {
             _window.Render(bounds, alpha);

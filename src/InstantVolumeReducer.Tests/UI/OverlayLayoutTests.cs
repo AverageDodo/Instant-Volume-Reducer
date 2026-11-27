@@ -75,6 +75,22 @@ public class OverlayLayoutTests
     }
 
     [Theory]
+    [InlineData(true, 85, 217)]
+    [InlineData(true, 20, 51)]
+    [InlineData(false, 85, OverlayLayout.IdleAlpha)]
+    [InlineData(false, 100, OverlayLayout.IdleAlpha)]
+    public void WindowAlpha_VisibleOnlyWhileReduced(bool reduced, int percent, byte alpha)
+    {
+        Assert.Equal(alpha, OverlayLayout.WindowAlpha(reduced, percent));
+    }
+
+    [Fact]
+    public void IdleAlpha_IsNotZero_SoTheWindowStillCountsAsVisible()
+    {
+        Assert.True(OverlayLayout.IdleAlpha > 0);
+    }
+
+    [Theory]
     [InlineData(100, 255)]
     [InlineData(85, 217)]
     [InlineData(20, 51)]

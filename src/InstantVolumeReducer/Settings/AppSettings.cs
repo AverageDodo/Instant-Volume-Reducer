@@ -103,6 +103,15 @@ public sealed class OverlaySettings
     public int Opacity { get; set; } = 85;
 
     public OverlayMonitor Monitor { get; set; } = OverlayMonitor.Primary;
+
+    /// <summary>
+    /// Experimental: keep the indicator window on screen (practically invisible) whenever the overlay is
+    /// enabled, and only make it visible while the volume is reduced. A window appearing over a fullscreen
+    /// game makes Windows switch from sending the game's frames straight to the monitor to composing the
+    /// desktop, which causes a short black screen on some HDR setups; a window that is always there avoids
+    /// that switch on toggle. Off by default.
+    /// </summary>
+    public bool KeepWindowReady { get; set; }
 }
 
 /// <summary>

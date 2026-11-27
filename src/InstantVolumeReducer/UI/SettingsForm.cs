@@ -51,6 +51,7 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox _overlaySizeBox;
     private readonly NumericUpDown _overlayOpacityBox;
     private readonly ComboBox _overlayMonitorBox;
+    private readonly CheckBox _overlayKeepReadyBox;
 
     /// <param name="settings">The current settings; the dialog doesn't modify this object.</param>
     /// <param name="audio">Used to list the output devices (initially and on Refresh).</param>
@@ -296,6 +297,12 @@ internal sealed class SettingsForm : Form
             TextAlign = HorizontalAlignment.Right,
             AccessibleName = "Overlay opacity in percent",
         };
+        _overlayKeepReadyBox = new CheckBox
+        {
+            Text = "&Keep the indicator ready to avoid black flashes in HDR games (experimental)",
+            AutoSize = true,
+            Margin = new Padding(3, 6, 3, 3),
+        };
         _overlayEnabledBox.CheckedChanged += (_, _) => UpdateOverlayControls();
 
         var overlayLayout = NewFormLayout(columns: 5);
@@ -310,8 +317,20 @@ internal sealed class SettingsForm : Form
         overlayLayout.Controls.Add(NewLabel("Displa&y:"), 2, 2);
         overlayLayout.Controls.Add(_overlayMonitorBox, 3, 2);
         overlayLayout.SetColumnSpan(_overlayMonitorBox, 2);
+        overlayLayout.Controls.Add(_overlayKeepReadyBox, 0, 3);
+        overlayLayout.SetColumnSpan(_overlayKeepReadyBox, 5);
 
         var overlayGroup = NewAutoSizeGroup("On-screen indicator", overlayLayout);
+
+        var overlayToolTip = new ToolTip { AutoPopDelay = 20000 };
+        FormClosed += (_, _) => overlayToolTip.Dispose();
+        overlayToolTip.SetToolTip(
+            _overlayKeepReadyBox,
+            "Keeps the indicator window on screen, practically invisible, whenever the indicator is on, and only\n" +
+            "makes it visible while the volume is reduced. Showing a new window over a fullscreen game can cause\n" +
+            "a short black screen on some HDR monitors; a window that's always there avoids that on toggle.\n" +
+            "Trade-off: games under the indicator's corner are always composed by Windows, which can add about\n" +
+            "one frame of delay and, on some setups, turn off variable refresh rate in windowed mode.");
 
         // ---- Buttons ----
         var okButton = new Button { Text = "OK", AutoSize = true, MinimumSize = new Size(80, 0) };
@@ -367,6 +386,7 @@ internal sealed class SettingsForm : Form
         _overlaySizeBox.SelectedValue = overlay.Size;
         _overlayMonitorBox.SelectedValue = overlay.Monitor;
         _overlayOpacityBox.Value = Math.Clamp(overlay.Opacity, OverlaySettings.MinOpacity, OverlaySettings.MaxOpacity);
+        _overlayKeepReadyBox.Checked = overlay.KeepWindowReady;
         UpdateOverlayControls();
 
         PopulateGrid();
@@ -437,6 +457,7 @@ internal sealed class SettingsForm : Form
                 Size = SelectedOr(_overlaySizeBox, _original.Overlay?.Size ?? OverlaySize.Medium),
                 Monitor = SelectedOr(_overlayMonitorBox, _original.Overlay?.Monitor ?? OverlayMonitor.Primary),
                 Opacity = (int)_overlayOpacityBox.Value,
+                KeepWindowReady = _overlayKeepReadyBox.Checked,
             },
         };
         DialogResult = DialogResult.OK;
@@ -700,6 +721,7 @@ internal sealed class SettingsForm : Form
         _overlaySizeBox.Enabled = enabled;
         _overlayOpacityBox.Enabled = enabled;
         _overlayMonitorBox.Enabled = enabled;
+        _overlayKeepReadyBox.Enabled = enabled;
     }
 
     private static T SelectedOr<T>(ComboBox box, T fallback)

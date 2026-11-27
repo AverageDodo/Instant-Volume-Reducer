@@ -18,6 +18,26 @@ Each change log entry is represented by a block, formatted as follows:
 ---
 ```
 
+### 2026-11-27 12:30: Experimental "keep the indicator ready" option against HDR black flashes
+
+#### Summary
+
+- New setting `OverlaySettings.KeepWindowReady`, off by default; missing in older settings files, which means off. In the settings dialog it's "Keep the indicator ready to avoid black flashes in HDR games (experimental)", with a tooltip explaining the trade-off.
+- When on, the overlay window stays shown whenever the indicator is enabled.
+  - It's drawn with alpha 1/255 (`OverlayLayout.IdleAlpha`) while the volume isn't reduced, and with the opacity setting while it is.
+  - Toggling only changes the alpha (`UpdateLayeredWindow`), never shows or hides the window.
+  - The topmost and active-monitor timer keeps running, so the window is already on the right monitor when it becomes visible.
+
+#### Reasoning
+
+- **The problem:** showing a new window over a fullscreen game makes Windows switch from sending the game's frames straight to the monitor to composing the desktop. On some HDR monitors, that switch causes a short black screen. Alt-Tab and system pop-ups cause the same switch.
+- **A window that's always present** means the switch doesn't happen on toggle.
+- **Alpha 1 instead of 0:** a fully transparent window may be treated as absent, which would bring the switch back when it becomes visible. 1/255 is invisible to the eye.
+- **Experimental and off by default:** whether it removes the flash depends on the GPU, driver and monitor, and it has to be confirmed on real HDR setups. The trade-off is that a game under the indicator is always composed: possibly about one frame of extra delay, and on some setups no variable refresh rate in windowed mode.
+- **Fallback if it doesn't help:** an option not to show the indicator over fullscreen apps.
+
+---
+
 ### 2026-11-27 12:13: On-screen indicator while the volume is reduced
 
 #### Summary

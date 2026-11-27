@@ -60,6 +60,9 @@ On first start, every connected output device is selected with the defaults: Rel
   - Choose the corner, the size (small, medium, large), the opacity (20–100 %) and the display: the main monitor, or the monitor with the active window. With the active window, the badge follows it within about 2 seconds.
   - Clicks go through the badge, it never takes the focus, and it isn't listed in the taskbar or Alt+Tab.
   - It stays inside the monitor's working area, so it doesn't cover the taskbar, and it scales with each monitor's display scaling.
+  - **Keep the indicator ready to avoid black flashes in HDR games (experimental):** a window appearing over a fullscreen game makes Windows switch from sending the game's frames straight to the monitor to composing the desktop. On some HDR monitors, that switch causes a short black screen.
+    - With this option, the indicator window stays on screen, practically invisible, whenever the indicator is on, and only becomes visible while the volume is reduced, so toggling doesn't trigger the switch.
+    - Trade-off: a game under the indicator's corner is always composed by Windows. That can add about one frame of delay and, on some setups, turn off variable refresh rate in windowed mode.
 
 Changes take effect when you click **OK**. Changing a device's mode or amount while the volume is reduced applies from the next reduction. Unticking a device while it's reduced restores it right away.
 
