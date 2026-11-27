@@ -10,17 +10,18 @@
     <!-- Per-monitor DPI awareness: the overlay is placed and sized in physical pixels on each monitor, and
          the settings dialog stays sharp when moved between monitors with different scaling. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <AssemblyVersion>0.2.0</AssemblyVersion>
-    <FileVersion>0.2.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
     <Product>Instant Volume Reducer</Product>
     <AssemblyTitle>Instant Volume Reducer</AssemblyTitle>
     <Description>Reduces the volume of selected audio output devices with a global hotkey and restores it on the next press.</Description>
-    <!-- The release version (SemVer, e.g. 0.2.0 or 0.3.0-beta.1). Raise it on develop before merging into
-         main: the release workflow tags and publishes it as v<Version> when it isn't released yet. -->
-    <Version>0.2.0</Version>
+    <!-- The release version (SemVer, e.g. 0.2.0 or 0.3.0-beta.1) and the only version number to change:
+         the assembly and file versions are derived from it. Raise it on develop before merging into main:
+         the release workflow tags and publishes it as v<Version> when it isn't released yet. Never reuse a
+         version that was published once, even if its release was deleted: with immutable releases, GitHub
+         keeps its tag name reserved (0.2.0 is reserved for that reason). -->
+    <Version>0.2.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
