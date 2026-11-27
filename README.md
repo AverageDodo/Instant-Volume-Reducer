@@ -148,6 +148,8 @@ Work flows `feature branch → develop → main`, always through pull requests:
 
 1. Branch off `develop`, then open a pull request into `develop`. **CI** (`.github/workflows/ci.yml`) builds and runs the tests.
 2. To release, raise `<Version>` in `src\InstantVolumeReducer\InstantVolumeReducer.csproj` on `develop` (SemVer: `0.2.0`, or `0.3.0-beta.1` for a pre-release).
+   - It's the only version number to change; the assembly and file versions are derived from it.
+   - **Never reuse a version that was published once.** With immutable releases, GitHub keeps a published release's tag name reserved even after the release and its tag are deleted. Publishing that version again fails with "tag_name was used by an immutable release". For example, `0.2.0` is reserved this way. The release check can't detect this beforehand, because GitHub's API doesn't list reserved tag names.
 3. Open a pull request from `develop` into `main`. Besides the build and tests, a **release check** makes sure it comes from `develop`, and says which version merging will release. It fails if the version is lower than the latest release. If the version is already released, it warns that merging won't create a release.
 4. Merge it with **Create a merge commit**. Squash or rebase merges make `main` and `develop` drift apart, which causes conflicts in later pull requests.
 5. The **Release** workflow (`.github/workflows/release.yml`) runs on the push to `main`:
